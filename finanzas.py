@@ -14,7 +14,7 @@ def cargar_datos():
         with open(ARCHIVO_DATOS, "r") as archivo:
             datos = json.load(archivo)
             
-        # Parche automático para compatibilidad de versiones
+        # Parches automáticos por compatibilidad de nuevas funciones
         if "stock_insumos" not in datos:
             datos["stock_insumos"] = []
         if "metas_ahorro" not in datos:
@@ -116,67 +116,89 @@ if seccion == "🏠 Dashboard General":
         df = pd.DataFrame(saldos["historial"])
         df["fecha"] = pd.to_datetime(df["fecha"])
         df["Mes"] = df["fecha"].dt.strftime("%Y-%m")
-        mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df["Mes"].unique(), reverse=True))
+        
+        # Filtros superiores de control financiero
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df["Mes"].unique(), reverse=True))
+        with col_f2:
+            filtro_pago = st.selectbox("🔍 Filtrar por Estado de Venta:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"])
+        with col_f3:
+            filtro_metodo = st.selectbox("💳 Filtrar por Método:", ["Todos", "💵 Efectivo", "📱 Mercado Pago", "🏦 Transferencia", "💳 Tarjeta"])
+            
         df_mes = df[df["Mes"] == mes_sel]
+        
+        # Aplicar Filtro de Estado de Pago
+        if filtro_pago != "Todos":
+            estado_limpio = filtro_pago.split(" ")[1]
+            df_mes = df_mes[df_mes["estado_pago"] == estado_limpio]
+            
+        # Aplicar Filtro de Método de Pago
+        if filtro_metodo != "Todos":
+            metodo_limpio = " ".join(filtro_metodo.split(" ")[1:])
+            df_mes = df_mes[df_mes["metodo_pago"] == metodo_limpio]
         
         g_col1, g_col2 = st.columns(2)
         with g_col1:
-            st.markdown("### 📊 Distribución de Gastos del Negocio")
+            st.markdown("### 📊 Egresos del Negocio")
             df_n_gasto = df_mes[(df_mes["cuenta"] == "Negocio") & (df_mes["tipo"] == "Gasto")]
             if not df_n_gasto.empty:
                 resumen_gasto_n = df_n_gasto.groupby("categoria")["monto"].sum()
-                st.scatter_chart(resumen_gasto_n)  # Usamos scatter como alternativa visual o bar expandida si se prefiere
-                # Alternativa limpia nativa Streamlit para pastel/proporciones en formato dataframe resumido
+                st.bar_chart(resumen_gasto_n)
                 st.dataframe(resumen_gasto_n.to_frame(name="Total Gastado ($)"), use_container_width=True)
-            else: 
-                st.caption("Sin egresos este mes.")
+            else: st.caption("Sin egresos bajo este filtro.")
                 
         with g_col2:
-            st.markdown("### 📊 Distribución de Gastos Personales")
+            st.markdown("### 📊 Egresos Personales")
             df_p_gasto = df_mes[(df_mes["cuenta"] == "Personal") & (df_mes["tipo"] == "Gasto")]
             if not df_p_gasto.empty:
                 resumen_gasto_p = df_p_gasto.groupby("categoria")["monto"].sum()
                 st.bar_chart(resumen_gasto_p)
                 st.dataframe(resumen_gasto_p.to_frame(name="Total Gastado ($)"), use_container_width=True)
-            else: 
-                st.caption("Sin egresos este mes.")
+            else: st.caption("Sin egresos bajo este filtro.")
 
         st.markdown("---")
         st.subheader("📥 Exportar Datos")
         csv_data = df_mes.to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Descargar Reporte del Mes (CSV)", data=csv_data, file_name=f"reporte_{mes_sel}.csv", mime="text/csv")
+        st.download_button(label="📥 Descargar Listado Filtrado (CSV)", data=csv_data, file_name=f"reporte_{mes_sel}.csv", mime="text/csv")
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("📋 Registro Histórico Detallado")
         
-        # --- MEJORA: TABLA INTERACTIVA CON OPCIÓN DE BORRADO DE MOVIMIENTOS ---
-        for idx, row in df_mes[::-1].iterrows():
-            with st.container(border=True):
-                col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1, 2, 2, 3, 1])
-                with col_h1:
-                    st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                with col_h2:
-                    color_t = "🟢" if row["tipo"] == "Ingreso" else "🔴"
-                    st.markdown(f"{color_t} **{row['tipo']}** ({row['cuenta']})")
-                with col_h3:
-                    st.markdown(f"**$ {row['monto']:,.2f}**")
-                with col_h4:
-                    st.markdown(f"*{row['categoria']}* - {row['detalle']}")
-                with col_h5:
-                    if st.button("🗑️", key=f"del_mov_{idx}"):
-                        # Revertir los saldos antes de borrar
-                        monto_revertir = row["monto"]
-                        if row["cuenta"] == "Negocio":
-                            if row["tipo"] == "Ingreso": saldos["caja_negocio"] -= monto_revertir
-                            else: saldos["caja_negocio"] += monto_revertir
-                        elif row["cuenta"] == "Personal":
-                            if row["tipo"] == "Ingreso": saldos["billetera_personal"] -= monto_revertir
-                            else: saldos["billetera_personal"] += monto_revertir
-                        
-                        # Borrar del historial
-                        saldos["historial"].pop(idx)
-                        guardar_datos(saldos)
-                        st.rerun()
+        if df_mes.empty:
+            st.info("No hay movimientos registrados para esta combinación de filtros.")
+        else:
+            for idx, row in df_mes[::-1].iterrows():
+                with st.container(border=True):
+                    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1, 2, 2, 3, 1])
+                    with col_h1:
+                        st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                    with col_h2:
+                        color_t = "🟢" if row["tipo"] == "Ingreso" else "🔴"
+                        st.markdown(f"{color_t} **{row['tipo']}** ({row['cuenta']})")
+                    with col_h3:
+                        st.markdown(f"**$ {row['monto']:,.2f}**")
+                        # Info extra si es una venta del emprendimiento
+                        if row["cuenta"] == "Negocio" and row["tipo"] == "Ingreso":
+                            est = row.get("estado_pago", "Total")
+                            met = row.get("metac_pago", row.get("metodo_pago", "Efectivo"))
+                            emoji_est = "💰" if est == "Total" else "📝" if est == "Seña" else "🤝"
+                            st.caption(f"{emoji_est} *{est}* | 💳 {met}")
+                    with col_h4:
+                        st.markdown(f"*{row['categoria']}* - {row['detalle']}")
+                    with col_h5:
+                        if st.button("🗑️", key=f"del_mov_{idx}"):
+                            monto_revertir = row["monto"]
+                            if row["cuenta"] == "Negocio":
+                                if row["tipo"] == "Ingreso": saldos["caja_negocio"] -= monto_revertir
+                                else: saldos["caja_negocio"] += monto_revertir
+                            elif row["cuenta"] == "Personal":
+                                if row["tipo"] == "Ingreso": saldos["billetera_personal"] -= monto_revertir
+                                else: saldos["billetera_personal"] += monto_revertir
+                            
+                            saldos["historial"].pop(idx)
+                            guardar_datos(saldos)
+                            st.rerun()
 
 # --- SECCIÓN 2: REGISTRAR MOVIMIENTOS ---
 elif seccion == "📝 Nueva Operación":
@@ -185,11 +207,19 @@ elif seccion == "📝 Nueva Operación":
     
     with st.container(border=True):
         if opcion == "Registrar Venta":
-            monto = st.number_input("Monto total de la venta ($)", min_value=0.0, step=50.0)
-            categoria = st.selectbox("Categoría", saldos["categorias_negocio_ingreso"])
-            nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña mate grabado")
+            monto = st.number_input("Monto ingresado hoy ($)", min_value=0.0, step=50.0, help="Colocá solo el dinero neto que te ingresa hoy en esta transacción.")
+            categoria = st.selectbox("Categoría de la venta", saldos["categorias_negocio_ingreso"])
             
-            # --- MEJORA: VINCULACIÓN CON STOCK DE INSUMOS ---
+            # --- MEJORAS COMERCIALES INTEGRADAS ---
+            col_v1, col_v2 = st.columns(2)
+            with col_v1:
+                est_pago = st.selectbox("Condición de la venta:", ["Total Pagado", "Seña", "Fiado"])
+                estado_guardar = "Total" if est_pago == "Total Pagado" else est_pago
+            with col_v2:
+                met_pago = st.selectbox("Método de cobro:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
+            
+            nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña mate de camionero")
+            
             st.markdown("---")
             descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
             insumo_seleccionado = None
@@ -203,7 +233,6 @@ elif seccion == "📝 Nueva Operación":
                 st.caption("⚠️ No hay insumos cargados en la sección de Stock todavía.")
 
             if st.button("Guardar Registro", type="primary"):
-                # Si seleccionó descontar stock, hacemos el descuento primero
                 if descuenta_stock and insumo_seleccionado:
                     for insumo in saldos["stock_insumos"]:
                         if insumo["item"] == insumo_seleccionado:
@@ -211,15 +240,25 @@ elif seccion == "📝 Nueva Operación":
                             nota += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
                 
                 saldos["caja_negocio"] += monto
-                saldos["historial"].append({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": monto, "categoria": categoria, "detalle": nota})
+                saldos["historial"].append({
+                    "fecha": datetime.now().strftime("%Y-%m-%d"), 
+                    "cuenta": "Negocio", 
+                    "tipo": "Ingreso", 
+                    "monto": monto, 
+                    "categoria": categoria, 
+                    "detalle": nota,
+                    "estado_pago": estado_guardar,
+                    "metodo_pago": met_pago
+                })
                 guardar_datos(saldos)
-                st.toast("🎯 ¡Venta guardada e inventario actualizado!")
+                st.toast(f"🎯 Venta ({met_pago} - {estado_guardar}) guardada correctamente")
                 st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", saldos["categorias_negocio_gasto"])
-            nota = st.text_input("Detalle del gasto:", placeholder="Ej: Compra de insumos laser")
+            met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
+            nota = st.text_input("Detalle del gasto:", placeholder="Ej: Compra de acrílicos en distribuidora")
             if st.button("Guardar Registro", type="primary"):
                 saldos["caja_negocio"] -= monto
                 saldos["historial"].append({
@@ -228,7 +267,9 @@ elif seccion == "📝 Nueva Operación":
                     "tipo": "Gasto", 
                     "monto": monto, 
                     "categoria": categoria, 
-                    "detalle": nota
+                    "detalle": nota,
+                    "estado_pago": "Total",
+                    "metodo_pago": met_pago
                 })
                 guardar_datos(saldos)
                 st.toast("📉 Gasto registrado")
@@ -240,8 +281,8 @@ elif seccion == "📝 Nueva Operación":
                 saldos["caja_negocio"] -= monto
                 saldos["billetera_personal"] += monto
                 f = datetime.now().strftime("%Y-%m-%d")
-                saldos["historial"].append({"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": monto, "categoria": "Retiro de Socio", "detalle": "Retiro de ganancias"})
-                saldos["historial"].append({"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": monto, "categoria": "Sueldo", "detalle": "Ingreso desde Negocio"})
+                saldos["historial"].append({"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": monto, "categoria": "Retiro de Socio", "detalle": "Retiro de ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo"})
+                saldos["historial"].append({"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": monto, "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo"})
                 guardar_datos(saldos)
                 st.toast("🔄 Traspaso completado")
                 st.rerun()
@@ -252,7 +293,7 @@ elif seccion == "📝 Nueva Operación":
             nota = st.text_input("Detalle del gasto:", placeholder="Ej: Compra supermercado")
             if st.button("Guardar Registro", type="primary"):
                 saldos["billetera_personal"] -= monto
-                saldos["historial"].append({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": monto, "categoria": categoria, "detalle": nota})
+                saldos["historial"].append({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": monto, "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"})
                 guardar_datos(saldos)
                 st.toast("🏠 Gasto personal guardado")
                 st.rerun()
