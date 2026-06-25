@@ -161,19 +161,30 @@ if seccion == "🏠 Dashboard General":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 🚀 --- NUEVA MEJORA: HISTORIALES SEPARADOS POR PESTAÑAS (TABS) ---
+        # --- HISTORIALES SEPARADOS POR PESTAÑAS (TABS) ---
         st.subheader("📋 Libros de Registro Separados")
         tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos Taller / Personal)"])
         
         # --- PESTAÑA 1: HISTORIAL DE INGRESOS ---
         with tab_ingresos:
-            filtro_pago = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"], key="f_pago")
-            df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
+            col_b1, col_b2 = st.columns([2, 1])
+            with col_b1:
+                filtro_pago = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"], key="f_pago")
             
+            df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
             if filtro_pago != "Todos":
                 estado_limpio = filtro_pago.split(" ")[1]
                 df_ingresos = df_ingresos[df_ingresos["estado_pago"] == estado_limpio]
-                
+            
+            # Botón para descargar CSV de ingresos filtrados
+            with col_b2:
+                st.write("<br>", unsafe_allow_html=True) 
+                if not df_ingresos.empty:
+                    csv_ingresos = df_ingresos.to_csv(index=False).encode('utf-8')
+                    st.download_button(label="📥 Descargar CSV Ingresos", data=csv_ingresos, file_name=f"ingresos_{mes_sel}.csv", mime="text/csv", use_container_width=True)
+                else:
+                    st.button("📥 Descargar CSV Ingresos", disabled=True, use_container_width=True)
+                    
             if df_ingresos.empty:
                 st.info("No hay ingresos registrados para este filtro.")
             else:
@@ -197,14 +208,25 @@ if seccion == "🏠 Dashboard General":
 
         # --- PESTAÑA 2: HISTORIAL DE EGRESOS ---
         with tab_egresos:
-            filtro_destino = st.selectbox("🔍 Filtrar Egresos por Destino:", ["Todos", "🛠️ Gastos del Negocio (Taller)", "🏠 Gastos Personales"], key="f_dest")
-            df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
+            col_be1, col_be2 = st.columns([2, 1])
+            with col_be1:
+                filtro_destino = st.selectbox("🔍 Filtrar Egresos por Destino:", ["Todos", "🛠️ Gastos del Negocio (Taller)", "🏠 Gastos Personales"], key="f_dest")
             
+            df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
             if filtro_destino == "🛠️ Gastos del Negocio (Taller)":
                 df_egresos = df_egresos[df_egresos["cuenta"] == "Negocio"]
             elif filtro_destino == "🏠 Gastos Personales":
                 df_egresos = df_egresos[df_egresos["cuenta"] == "Personal"]
                 
+            # Botón para descargar CSV de egresos filtrados
+            with col_be2:
+                st.write("<br>", unsafe_allow_html=True) 
+                if not df_egresos.empty:
+                    csv_egresos = df_egresos.to_csv(index=False).encode('utf-8')
+                    st.download_button(label="📥 Descargar CSV Egresos", data=csv_egresos, file_name=f"egresos_{mes_sel}.csv", mime="text/csv", use_container_width=True)
+                else:
+                    st.button("📥 Descargar CSV Egresos", disabled=True, use_container_width=True)
+
             if df_egresos.empty:
                 st.info("No hay egresos registrados para este filtro.")
             else:
@@ -214,7 +236,6 @@ if seccion == "🏠 Dashboard General":
                         with col_e1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
                         with col_e2: st.markdown(f"**$ {row['monto']:,.2f}**")
                         with col_e3:
-                            # Cartel identificador de tipo de gasto
                             if row["cuenta"] == "Negocio":
                                 etiqueta = "⚙️ GASTO TALLER"
                                 estilo_txt = f"<span style='color:#38BDF8; font-weight:bold;'>{etiqueta}</span>"
