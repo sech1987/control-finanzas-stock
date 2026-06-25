@@ -169,7 +169,7 @@ if seccion == "🏠 Dashboard General":
         with tab_ingresos:
             col_b1, col_b2 = st.columns([2, 1])
             with col_b1:
-                filtro_pago = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"], key="f_pago")
+                filtro_pago = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado", "📄 Presupuesto"], key="f_pago")
             
             df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
             if filtro_pago != "Todos":
@@ -201,7 +201,9 @@ if seccion == "🏠 Dashboard General":
                         with col_h4:
                             if st.button("🗑️", key=f"del_ing_{idx}"):
                                 sals = st.session_state.saldos
-                                sals["caja_negocio"] -= row["monto"]
+                                # Si no era un presupuesto simulado, devolvemos la caja
+                                if est != "Presupuesto":
+                                    sals["caja_negocio"] -= row["monto"]
                                 sals["historial"].pop(idx)
                                 guardar_datos(sals)
                                 st.rerun()
@@ -257,21 +259,28 @@ if seccion == "🏠 Dashboard General":
 # --- SECCIÓN 2: REGISTRAR MOVIMIENTOS ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
-    opcion = st.selectbox("¿Qué vas a registrar hoy?", ["Registrar Venta", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"])
+    opcion = st.selectbox("¿Qué vas a registrar hoy?", ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"])
     
     with st.container(border=True):
-        if opcion == "Registrar Venta":
-            monto = st.number_input("Monto ingresado hoy ($)", min_value=0.0, step=50.0)
-            categoria = st.selectbox("Categoría de la venta", saldos["categorias_negocio_ingreso"])
+        if opcion == "Registrar Venta / Presupuesto":
+            # Inicializar estados de comprobantes en memoria temporal si no existen
+            if "ultimo_comprobante" not in st.session_state:
+                st.session_state.ultimo_comprobante = None
+                st.session_state.tipo_comprobante = None
+
+            monto = st.number_input("Monto total de la operación ($)", min_value=0.0, step=50.0)
+            categoria = st.selectbox("Categoría", saldos["categorias_negocio_ingreso"])
             
             col_v1, col_v2 = st.columns(2)
             with col_v1:
-                est_pago = st.selectbox("Condición de la venta:", ["Total Pagado", "Seña", "Fiado"])
+                est_pago = st.selectbox("Condición de la operación:", ["Total Pagado", "Seña", "Fiado", "Presupuesto"])
                 estado_guardar = "Total" if est_pago == "Total Pagado" else est_pago
             with col_v2:
-                met_pago = st.selectbox("Método de cobro:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
+                met_pago = st.selectbox("Método de cobro / Referencia:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta", "Ninguno (Presupuesto)"])
             
-            nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña cartel de acrílico")
+            # Campos extra opcionales para el comprobante profesional
+            cliente_nombre = st.text_input("Nombre del Cliente (Opcional, para el comprobante):", placeholder="Ej: Juan Pérez")
+            nota = st.text_input("Detalle del trabajo / Producto:", placeholder="Ej: Grabado láser de termos y mates")
             
             st.markdown("---")
             descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
@@ -283,27 +292,63 @@ elif seccion == "📝 Nueva Operación":
                 insumo_seleccionado = st.selectbox("Selecciona el insumo consumido:", lista_nombres_insumos)
                 cantidad_a_descontar = st.number_input("Cantidad utilizada:", min_value=1, step=1)
 
-            if st.button("Guardar Registro", type="primary"):
+            if st.button("Guardar Registro e Imprimir Comprobante", type="primary"):
+                detalle_final = nota
                 if descuenta_stock and insumo_seleccionado:
                     for insumo in saldos["stock_insumos"]:
                         if insumo["item"] == insumo_seleccionado:
                             insumo["cantidad"] = max(0, insumo["cantidad"] - cantidad_a_descontar)
-                            nota += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
+                            detalle_final += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
                 
-                saldos["caja_negocio"] += monto
+                # Modificar caja solo si representa un ingreso real (no un presupuesto simulado)
+                if estado_guardar != "Presupuesto":
+                    saldos["caja_negocio"] += monto
+
                 saldos["historial"].append({
                     "fecha": datetime.now().strftime("%Y-%m-%d"), 
                     "cuenta": "Negocio", 
                     "tipo": "Ingreso", 
                     "monto": monto, 
                     "categoria": categoria, 
-                    "detalle": nota,
+                    "detalle": f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final,
                     "estado_pago": estado_guardar,
                     "metodo_pago": met_pago
                 })
                 guardar_datos(saldos)
-                st.toast(f"🎯 Venta ({met_pago} - {estado_guardar}) guardada")
+                
+                # --- GENERADOR INTELIGENTE DE TEXTO ---
+                fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+                nom_cliente = cliente_nombre.strip() if cliente_nombre else "Cliente Frecuente"
+                
+                if estado_guardar == "Total":
+                    texto = f"🧾 *COMPROBANTE DE PAGO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_cliente}\n💼 *Detalle:* {nota}\n💰 *Total Abonado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n¡Muchas gracias por tu compra!"
+                    st.session_state.tipo_comprobante = "¡Recibo de Pago guardado!"
+                elif estado_guardar == "Seña":
+                    texto = f"📝 *COMPROBANTE DE SEÑA*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_cliente}\n💼 *Detalle:* {nota}\n💵 *Monto Señado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n📌 *Estado del pedido:* Registrado en producción. ¡Muchas gracias!"
+                    st.session_state.tipo_comprobante = "¡Seña registrada!"
+                elif estado_guardar == "Presupuesto":
+                    texto = f"📄 *PRESUPUESTO ESTIMADO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_cliente}\n💼 *Rubro/Trabajo:* {categoria}\n📝 *Detalle:* {nota}\n💵 *Inversión Total Estimada:* $ {monto:,.2f}\n\n⚠️ _Validez del presupuesto: 7 días corridos desde la fecha de emisión._"
+                    st.session_state.tipo_comprobante = "¡Presupuesto Emitido con éxito!"
+                else:
+                    texto = f"🤝 *REGISTRO DE CUENTA CORRIENTE (FIADO)*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_cliente}\n💼 *Detalle:* {nota}\n📉 *Saldo Pendiente:* $ {monto:,.2f}"
+                    st.session_state.tipo_comprobante = "¡Operación guardada en cuenta corriente!"
+
+                st.session_state.ultimo_comprobante = texto
                 st.rerun()
+
+            # --- DESPLIEGUE DEL COMPROBANTE GENERADO ---
+            if st.session_state.ultimo_comprobante:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.success(st.session_state.tipo_comprobante)
+                with st.container(border=True):
+                    st.markdown("### 📋 Comprobante Listo para Enviar")
+                    st.text_area("Texto listo para copiar:", value=st.session_state.ultimo_comprobante, height=180)
+                    st.caption("💡 Podes seleccionar todo el texto de arriba, copiarlo y pegarlo directamente en WhatsApp Web o enviarlo por mail.")
+                    
+                    if st.button("Limpiar Pantalla / Cargar Otro"):
+                        st.session_state.ultimo_comprobante = None
+                        st.session_state.tipo_comprobante = None
+                        st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
@@ -430,7 +475,7 @@ elif seccion == "📉 Punto de Equilibrio":
 # --- SECCIÓN 5: METAS DE AHORRO MULTIALCANCÍA ---
 elif seccion == "🎯 Metas de Ahorro":
     st.title("🎯 Objetivos y Metas de Ahorro Múltiples")
-    st.write("Crea diferentes alcancías virtuales y asigna tus ahorros personales.")
+    st.write("Crea diferentes alcancías virtuales and asigna tus ahorros personales.")
     
     with st.expander("➕ Crear Nueva Meta de Ahorro"):
         col_m1, col_m2 = st.columns(2)
