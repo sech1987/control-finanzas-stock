@@ -108,12 +108,10 @@ if seccion == "🏠 Dashboard General":
             st.markdown(f"<h2 style='color: #34D399; font-size: 42px; margin-top: 0px; margin-bottom: 5px;'>$ {saldos['billetera_personal']:,.2f}</h2>", unsafe_allow_html=True)
             st.markdown("<span style='color: #64748B; font-size: 13px;'>Dinero tuyo, separado de las cuentas del negocio.</span>", unsafe_allow_html=True)
         
-    # 🚀 --- NUEVA SECCIÓN SUPERPODER: SALDOS DISPONIBLES POR CAJA (PREVISIÓN) ---
+    # --- SALDOS DISPONIBLES POR CAJA ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💡 Distribución Interna Recomendada (Porcentajes del Taller)")
-    st.markdown("<p style='color: #94A3B8; font-size: 14px; margin-top:-10px;'>Separación teórica del dinero actual del negocio para no descapitalizarte.</p>", unsafe_allow_html=True)
     
-    # Calculamos los frascos al vuelo basados en el total disponible real del negocio
     monto_negocio_total = max(0.0, saldos["caja_negocio"])
     caja_insumos = monto_negocio_total * 0.40
     caja_sueldos = monto_negocio_total * 0.40
@@ -124,17 +122,14 @@ if seccion == "🏠 Dashboard General":
         with st.container(border=True):
             st.markdown("<p style='color: #38BDF8; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🛠️ CAJA INSUMOS (40%)</p>", unsafe_allow_html=True)
             st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_insumos:,.2f}</h3>", unsafe_allow_html=True)
-            st.caption("Destinado únicamente a reposición de stock.")
     with sub_col2:
         with st.container(border=True):
             st.markdown("<p style='color: #A78BFA; font-size: 13px; font-weight: bold; margin-bottom:2px;'>💰 CAJA SUELDOS (40%)</p>", unsafe_allow_html=True)
             st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_sueldos:,.2f}</h3>", unsafe_allow_html=True)
-            st.caption("Dinero reservado para tus retiros.")
     with sub_col3:
         with st.container(border=True):
             st.markdown("<p style='color: #FBBF24; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🔧 MANTENIMIENTO (20%)</p>", unsafe_allow_html=True)
             st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_mantenimiento:,.2f}</h3>", unsafe_allow_html=True)
-            st.caption("Fondo para emergencias o herramientas.")
 
     st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
     
@@ -145,87 +140,98 @@ if seccion == "🏠 Dashboard General":
         df["fecha"] = pd.to_datetime(df["fecha"])
         df["Mes"] = df["fecha"].dt.strftime("%Y-%m")
         
-        # Filtros superiores de control financiero
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df["Mes"].unique(), reverse=True))
-        with col_f2:
-            filtro_pago = st.selectbox("🔍 Filtrar por Estado de Venta:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"])
-        with col_f3:
-            filtro_metodo = st.selectbox("💳 Filtrar por Método:", ["Todos", "💵 Efectivo", "📱 Mercado Pago", "🏦 Transferencia", "💳 Tarjeta"])
-            
+        # Filtro global de mes
+        mes_sel = st.selectbox("📆 Seleccionar Período de Análisis:", sorted(df["Mes"].unique(), reverse=True))
         df_mes = df[df["Mes"] == mes_sel]
-        
-        # Aplicar Filtro de Estado de Pago
-        if filtro_pago != "Todos":
-            estado_limpio = filtro_pago.split(" ")[1]
-            df_mes = df_mes[df_mes["estado_pago"] == estado_limpio]
-            
-        # Aplicar Filtro de Método de Pago
-        if filtro_metodo != "Todos":
-            metodo_limpio = " ".join(filtro_metodo.split(" ")[1:])
-            df_mes = df_mes[df_mes["metodo_pago"] == metodo_limpio]
         
         g_col1, g_col2 = st.columns(2)
         with g_col1:
-            st.markdown("### 📊 Egresos del Negocio")
+            st.markdown("### 📊 Resumen Gastos del Negocio")
             df_n_gasto = df_mes[(df_mes["cuenta"] == "Negocio") & (df_mes["tipo"] == "Gasto")]
             if not df_n_gasto.empty:
-                resumen_gasto_n = df_n_gasto.groupby("categoria")["monto"].sum()
-                st.bar_chart(resumen_gasto_n)
-                st.dataframe(resumen_gasto_n.to_frame(name="Total Gastado ($)"), use_container_width=True)
-            else: st.caption("Sin egresos bajo este filtro.")
+                st.bar_chart(df_n_gasto.groupby("categoria")["monto"].sum())
+            else: st.caption("Sin egresos este mes.")
                 
         with g_col2:
-            st.markdown("### 📊 Egresos Personales")
+            st.markdown("### 📊 Resumen Gastos Personales")
             df_p_gasto = df_mes[(df_mes["cuenta"] == "Personal") & (df_mes["tipo"] == "Gasto")]
             if not df_p_gasto.empty:
-                resumen_gasto_p = df_p_gasto.groupby("categoria")["monto"].sum()
-                st.bar_chart(resumen_gasto_p)
-                st.dataframe(resumen_gasto_p.to_frame(name="Total Gastado ($)"), use_container_width=True)
-            else: st.caption("Sin egresos bajo este filtro.")
+                st.bar_chart(df_p_gasto.groupby("categoria")["monto"].sum())
+            else: st.caption("Sin egresos este mes.")
 
-        st.markdown("---")
-        st.subheader("📥 Exportar Datos")
-        csv_data = df_mes.to_csv(index=False).encode('utf-8')
-        st.download_button(label="📥 Descargar Listado Filtrado (CSV)", data=csv_data, file_name=f"reporte_{mes_sel}.csv", mime="text/csv")
-        
         st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("📋 Registro Histórico Detallado")
         
-        if df_mes.empty:
-            st.info("No hay movimientos registrados para esta combinación de filtros.")
-        else:
-            for idx, row in df_mes[::-1].iterrows():
-                with st.container(border=True):
-                    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1, 2, 2, 3, 1])
-                    with col_h1:
-                        st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                    with col_h2:
-                        color_t = "🟢" if row["tipo"] == "Ingreso" else "🔴"
-                        st.markdown(f"{color_t} **{row['tipo']}** ({row['cuenta']})")
-                    with col_h3:
-                        st.markdown(f"**$ {row['monto']:,.2f}**")
-                        if row["cuenta"] == "Negocio" and row["tipo"] == "Ingreso":
+        # 🚀 --- NUEVA MEJORA: HISTORIALES SEPARADOS POR PESTAÑAS (TABS) ---
+        st.subheader("📋 Libros de Registro Separados")
+        tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos Taller / Personal)"])
+        
+        # --- PESTAÑA 1: HISTORIAL DE INGRESOS ---
+        with tab_ingresos:
+            filtro_pago = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado"], key="f_pago")
+            df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
+            
+            if filtro_pago != "Todos":
+                estado_limpio = filtro_pago.split(" ")[1]
+                df_ingresos = df_ingresos[df_ingresos["estado_pago"] == estado_limpio]
+                
+            if df_ingresos.empty:
+                st.info("No hay ingresos registrados para este filtro.")
+            else:
+                for idx, row in df_ingresos[::-1].iterrows():
+                    with st.container(border=True):
+                        col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
+                        with col_h1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                        with col_h2: st.markdown(f"**$ {row['monto']:,.2f}**")
+                        with col_h3:
                             est = row.get("estado_pago", "Total")
                             met = row.get("metodo_pago", "Efectivo")
-                            emoji_est = "💰" if est == "Total" else "📝" if est == "Seña" else "🤝"
-                            st.caption(f"{emoji_est} *{est}* | 💳 {met}")
-                    with col_h4:
-                        st.markdown(f"*{row['categoria']}* - {row['detalle']}")
-                    with col_h5:
-                        if st.button("🗑️", key=f"del_mov_{idx}"):
-                            monto_revertir = row["monto"]
+                            st.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
+                            st.caption(f"Condición: **{est}** | Cobrado por: **{met}**")
+                        with col_h4:
+                            if st.button("🗑️", key=f"del_ing_{idx}"):
+                                sals = st.session_state.saldos
+                                sals["caja_negocio"] -= row["monto"]
+                                sals["historial"].pop(idx)
+                                guardar_datos(sals)
+                                st.rerun()
+
+        # --- PESTAÑA 2: HISTORIAL DE EGRESOS ---
+        with tab_egresos:
+            filtro_destino = st.selectbox("🔍 Filtrar Egresos por Destino:", ["Todos", "🛠️ Gastos del Negocio (Taller)", "🏠 Gastos Personales"], key="f_dest")
+            df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
+            
+            if filtro_destino == "🛠️ Gastos del Negocio (Taller)":
+                df_egresos = df_egresos[df_egresos["cuenta"] == "Negocio"]
+            elif filtro_destino == "🏠 Gastos Personales":
+                df_egresos = df_egresos[df_egresos["cuenta"] == "Personal"]
+                
+            if df_egresos.empty:
+                st.info("No hay egresos registrados para este filtro.")
+            else:
+                for idx, row in df_egresos[::-1].iterrows():
+                    with st.container(border=True):
+                        col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
+                        with col_e1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                        with col_e2: st.markdown(f"**$ {row['monto']:,.2f}**")
+                        with col_e3:
+                            # Cartel identificador de tipo de gasto
                             if row["cuenta"] == "Negocio":
-                                if row["tipo"] == "Ingreso": saldos["caja_negocio"] -= monto_revertir
-                                else: saldos["caja_negocio"] += monto_revertir
-                            elif row["cuenta"] == "Personal":
-                                if row["tipo"] == "Ingreso": saldos["billetera_personal"] -= monto_revertir
-                                else: saldos["billetera_personal"] += monto_revertir
-                            
-                            saldos["historial"].pop(idx)
-                            guardar_datos(saldos)
-                            st.rerun()
+                                etiqueta = "⚙️ GASTO TALLER"
+                                estilo_txt = f"<span style='color:#38BDF8; font-weight:bold;'>{etiqueta}</span>"
+                            else:
+                                etiqueta = "👤 PERSONAL"
+                                estilo_txt = f"<span style='color:#34D399; font-weight:bold;'>{etiqueta}</span>"
+                                
+                            st.markdown(f"{estilo_txt} | *{row['categoria']}*")
+                            st.markdown(f"{row['detalle']}")
+                        with col_e4:
+                            if st.button("🗑️", key=f"del_egr_{idx}"):
+                                sals = st.session_state.saldos
+                                if row["cuenta"] == "Negocio": sals["caja_negocio"] += row["monto"]
+                                else: sals["billetera_personal"] += row["monto"]
+                                sals["historial"].pop(idx)
+                                guardar_datos(sals)
+                                st.rerun()
 
 # --- SECCIÓN 2: REGISTRAR MOVIMIENTOS ---
 elif seccion == "📝 Nueva Operación":
@@ -244,7 +250,7 @@ elif seccion == "📝 Nueva Operación":
             with col_v2:
                 met_pago = st.selectbox("Método de cobro:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
             
-            nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña mate de camionero")
+            nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña cartel de acrílico")
             
             st.markdown("---")
             descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
@@ -255,8 +261,6 @@ elif seccion == "📝 Nueva Operación":
                 lista_nombres_insumos = [i["item"] for i in saldos["stock_insumos"]]
                 insumo_seleccionado = st.selectbox("Selecciona el insumo consumido:", lista_nombres_insumos)
                 cantidad_a_descontar = st.number_input("Cantidad utilizada:", min_value=1, step=1)
-            elif descuenta_stock and not saldos["stock_insumos"]:
-                st.caption("⚠️ No hay insumos cargados en la sección de Stock todavía.")
 
             if st.button("Guardar Registro", type="primary"):
                 if descuenta_stock and insumo_seleccionado:
@@ -277,14 +281,14 @@ elif seccion == "📝 Nueva Operación":
                     "metodo_pago": met_pago
                 })
                 guardar_datos(saldos)
-                st.toast(f"🎯 Venta ({met_pago} - {estado_guardar}) guardada correctamente")
+                st.toast(f"🎯 Venta ({met_pago} - {estado_guardar}) guardada")
                 st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", saldos["categorias_negocio_gasto"])
             met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
-            nota = st.text_input("Detalle del gasto:", placeholder="Ej: Compra de acrílicos en distribuidora")
+            nota = st.text_input("Detalle del gasto:", placeholder="Ej: Compra de acrílicos")
             if st.button("Guardar Registro", type="primary"):
                 saldos["caja_negocio"] -= monto
                 saldos["historial"].append({
@@ -338,7 +342,7 @@ elif seccion == "📦 Stock de Insumos":
             if nombre_i.strip():
                 saldos["stock_insumos"].append({"item": nombre_i.strip(), "cantidad": cant_i, "minimo": minimo_i})
                 guardar_datos(saldos)
-                st.toast(f"📦 {nombre_i} añadido al inventario")
+                st.toast(f"📦 {nombre_i} añadido")
                 st.rerun()
 
     st.markdown("---")
