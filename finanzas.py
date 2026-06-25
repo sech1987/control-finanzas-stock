@@ -108,6 +108,34 @@ if seccion == "🏠 Dashboard General":
             st.markdown(f"<h2 style='color: #34D399; font-size: 42px; margin-top: 0px; margin-bottom: 5px;'>$ {saldos['billetera_personal']:,.2f}</h2>", unsafe_allow_html=True)
             st.markdown("<span style='color: #64748B; font-size: 13px;'>Dinero tuyo, separado de las cuentas del negocio.</span>", unsafe_allow_html=True)
         
+    # 🚀 --- NUEVA SECCIÓN SUPERPODER: SALDOS DISPONIBLES POR CAJA (PREVISIÓN) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("💡 Distribución Interna Recomendada (Porcentajes del Taller)")
+    st.markdown("<p style='color: #94A3B8; font-size: 14px; margin-top:-10px;'>Separación teórica del dinero actual del negocio para no descapitalizarte.</p>", unsafe_allow_html=True)
+    
+    # Calculamos los frascos al vuelo basados en el total disponible real del negocio
+    monto_negocio_total = max(0.0, saldos["caja_negocio"])
+    caja_insumos = monto_negocio_total * 0.40
+    caja_sueldos = monto_negocio_total * 0.40
+    caja_mantenimiento = monto_negocio_total * 0.20
+    
+    sub_col1, sub_col2, sub_col3 = st.columns(3)
+    with sub_col1:
+        with st.container(border=True):
+            st.markdown("<p style='color: #38BDF8; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🛠️ CAJA INSUMOS (40%)</p>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_insumos:,.2f}</h3>", unsafe_allow_html=True)
+            st.caption("Destinado únicamente a reposición de stock.")
+    with sub_col2:
+        with st.container(border=True):
+            st.markdown("<p style='color: #A78BFA; font-size: 13px; font-weight: bold; margin-bottom:2px;'>💰 CAJA SUELDOS (40%)</p>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_sueldos:,.2f}</h3>", unsafe_allow_html=True)
+            st.caption("Dinero reservado para tus retiros.")
+    with sub_col3:
+        with st.container(border=True):
+            st.markdown("<p style='color: #FBBF24; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🔧 MANTENIMIENTO (20%)</p>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_mantenimiento:,.2f}</h3>", unsafe_allow_html=True)
+            st.caption("Fondo para emergencias o herramientas.")
+
     st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
     
     if not saldos["historial"]:
@@ -178,10 +206,9 @@ if seccion == "🏠 Dashboard General":
                         st.markdown(f"{color_t} **{row['tipo']}** ({row['cuenta']})")
                     with col_h3:
                         st.markdown(f"**$ {row['monto']:,.2f}**")
-                        # Info extra si es una venta del emprendimiento
                         if row["cuenta"] == "Negocio" and row["tipo"] == "Ingreso":
                             est = row.get("estado_pago", "Total")
-                            met = row.get("metac_pago", row.get("metodo_pago", "Efectivo"))
+                            met = row.get("metodo_pago", "Efectivo")
                             emoji_est = "💰" if est == "Total" else "📝" if est == "Seña" else "🤝"
                             st.caption(f"{emoji_est} *{est}* | 💳 {met}")
                     with col_h4:
@@ -207,10 +234,9 @@ elif seccion == "📝 Nueva Operación":
     
     with st.container(border=True):
         if opcion == "Registrar Venta":
-            monto = st.number_input("Monto ingresado hoy ($)", min_value=0.0, step=50.0, help="Colocá solo el dinero neto que te ingresa hoy en esta transacción.")
+            monto = st.number_input("Monto ingresado hoy ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría de la venta", saldos["categorias_negocio_ingreso"])
             
-            # --- MEJORAS COMERCIALES INTEGRADAS ---
             col_v1, col_v2 = st.columns(2)
             with col_v1:
                 est_pago = st.selectbox("Condición de la venta:", ["Total Pagado", "Seña", "Fiado"])
