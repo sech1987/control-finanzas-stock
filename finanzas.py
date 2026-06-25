@@ -14,7 +14,7 @@ def cargar_datos():
         with open(ARCHIVO_DATOS, "r") as archivo:
             datos = json.load(archivo)
             
-        # Parche automático por si el archivo viene de versiones viejas
+        # Parche automático para compatibilidad de versiones
         if "stock_insumos" not in datos:
             datos["stock_insumos"] = []
         if "metas_ahorro" not in datos:
@@ -121,15 +121,25 @@ if seccion == "🏠 Dashboard General":
         
         g_col1, g_col2 = st.columns(2)
         with g_col1:
-            st.markdown("### 📊 Egresos del Negocio")
+            st.markdown("### 📊 Distribución de Gastos del Negocio")
             df_n_gasto = df_mes[(df_mes["cuenta"] == "Negocio") & (df_mes["tipo"] == "Gasto")]
-            if not df_n_gasto.empty: st.bar_chart(df_n_gasto.groupby("categoria")["monto"].sum())
-            else: st.caption("Sin egresos este mes.")
+            if not df_n_gasto.empty:
+                resumen_gasto_n = df_n_gasto.groupby("categoria")["monto"].sum()
+                st.scatter_chart(resumen_gasto_n)  # Usamos scatter como alternativa visual o bar expandida si se prefiere
+                # Alternativa limpia nativa Streamlit para pastel/proporciones en formato dataframe resumido
+                st.dataframe(resumen_gasto_n.to_frame(name="Total Gastado ($)"), use_container_width=True)
+            else: 
+                st.caption("Sin egresos este mes.")
+                
         with g_col2:
-            st.markdown("### 📊 Egresos Personales")
+            st.markdown("### 📊 Distribución de Gastos Personales")
             df_p_gasto = df_mes[(df_mes["cuenta"] == "Personal") & (df_mes["tipo"] == "Gasto")]
-            if not df_p_gasto.empty: st.area_chart(df_p_gasto.groupby("categoria")["monto"].sum())
-            else: st.caption("Sin egresos este mes.")
+            if not df_p_gasto.empty:
+                resumen_gasto_p = df_p_gasto.groupby("categoria")["monto"].sum()
+                st.bar_chart(resumen_gasto_p)
+                st.dataframe(resumen_gasto_p.to_frame(name="Total Gastado ($)"), use_container_width=True)
+            else: 
+                st.caption("Sin egresos este mes.")
 
         st.markdown("---")
         st.subheader("📥 Exportar Datos")
@@ -138,7 +148,35 @@ if seccion == "🏠 Dashboard General":
         
         st.markdown("<br>", unsafe_allow_html=True)
         st.subheader("📋 Registro Histórico Detallado")
-        st.dataframe(df_mes[::-1], use_container_width=True)
+        
+        # --- MEJORA: TABLA INTERACTIVA CON OPCIÓN DE BORRADO DE MOVIMIENTOS ---
+        for idx, row in df_mes[::-1].iterrows():
+            with st.container(border=True):
+                col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1, 2, 2, 3, 1])
+                with col_h1:
+                    st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                with col_h2:
+                    color_t = "🟢" if row["tipo"] == "Ingreso" else "🔴"
+                    st.markdown(f"{color_t} **{row['tipo']}** ({row['cuenta']})")
+                with col_h3:
+                    st.markdown(f"**$ {row['monto']:,.2f}**")
+                with col_h4:
+                    st.markdown(f"*{row['categoria']}* - {row['detalle']}")
+                with col_h5:
+                    if st.button("🗑️", key=f"del_mov_{idx}"):
+                        # Revertir los saldos antes de borrar
+                        monto_revertir = row["monto"]
+                        if row["cuenta"] == "Negocio":
+                            if row["tipo"] == "Ingreso": saldos["caja_negocio"] -= monto_revertir
+                            else: saldos["caja_negocio"] += monto_revertir
+                        elif row["cuenta"] == "Personal":
+                            if row["tipo"] == "Ingreso": saldos["billetera_personal"] -= monto_revertir
+                            else: saldos["billetera_personal"] += monto_revertir
+                        
+                        # Borrar del historial
+                        saldos["historial"].pop(idx)
+                        guardar_datos(saldos)
+                        st.rerun()
 
 # --- SECCIÓN 2: REGISTRAR MOVIMIENTOS ---
 elif seccion == "📝 Nueva Operación":
@@ -150,11 +188,32 @@ elif seccion == "📝 Nueva Operación":
             monto = st.number_input("Monto total de la venta ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", saldos["categorias_negocio_ingreso"])
             nota = st.text_input("Detalle o Nombre del Cliente:", placeholder="Ej: Juan Perez - Seña mate grabado")
+            
+            # --- MEJORA: VINCULACIÓN CON STOCK DE INSUMOS ---
+            st.markdown("---")
+            descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
+            insumo_seleccionado = None
+            cantidad_a_descontar = 0
+            
+            if descuenta_stock and saldos["stock_insumos"]:
+                lista_nombres_insumos = [i["item"] for i in saldos["stock_insumos"]]
+                insumo_seleccionado = st.selectbox("Selecciona el insumo consumido:", lista_nombres_insumos)
+                cantidad_a_descontar = st.number_input("Cantidad utilizada:", min_value=1, step=1)
+            elif descuenta_stock and not saldos["stock_insumos"]:
+                st.caption("⚠️ No hay insumos cargados en la sección de Stock todavía.")
+
             if st.button("Guardar Registro", type="primary"):
+                # Si seleccionó descontar stock, hacemos el descuento primero
+                if descuenta_stock and insumo_seleccionado:
+                    for insumo in saldos["stock_insumos"]:
+                        if insumo["item"] == insumo_seleccionado:
+                            insumo["cantidad"] = max(0, insumo["cantidad"] - cantidad_a_descontar)
+                            nota += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
+                
                 saldos["caja_negocio"] += monto
                 saldos["historial"].append({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": monto, "categoria": categoria, "detalle": nota})
                 guardar_datos(saldos)
-                st.toast("🎯 ¡Venta guardada!")
+                st.toast("🎯 ¡Venta guardada e inventario actualizado!")
                 st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
