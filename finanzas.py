@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -9,10 +10,11 @@ st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", pag
 # --- CONEXIÓN DIRECTA Y SEGURA CON GSPREAD ---
 def conectar_google_sheets():
     try:
-        # Cargamos las claves desde los Secrets de Streamlit
-        info_claves = dict(st.secrets["connections"]["gsheets"])
+        # Leemos el bloque crudo empaquetado en JSON desde los Secrets
+        texto_json = st.secrets["connections"]["gsheets"]["json_completo"]
+        info_claves = json.loads(texto_json)
         
-        # Arreglo automático para que lea bien la clave en una o múltiples líneas
+        # Formateamos los saltos de línea internos de la firma digital de Google
         if "private_key" in info_claves:
             info_claves["private_key"] = info_claves["private_key"].replace("\\n", "\n")
         
@@ -55,9 +57,9 @@ def cargar_datos_gspread(nombre_pestana):
 def guardar_datos_gspread(df, nombre_pestana):
     try:
         hoja = planilla_cloud.worksheet(nombre_pestana)
-        hoja.clear() # Limpiamos la pestaña para evitar duplicados ruidosos
+        hoja.clear() # Limpiamos la pestaña para evitar duplicados
         
-        # Convertimos todo a texto plano y rellenamos vacíos para que viaje sin errores
+        # Convertimos todo a texto plano y rellenamos vacíos
         df_limpio = df.copy().fillna("")
         for col in df_limpio.columns:
             df_limpio[col] = df_limpio[col].astype(str)
