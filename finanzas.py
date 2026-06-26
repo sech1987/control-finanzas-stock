@@ -5,46 +5,51 @@ from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
-# --- 🔌 CONEXIÓN DIRECTA CON GOOGLE SHEETS ---
-# Inicializa la conexión nativa utilizando la URL que guardaste en Secrets
+# --- 🔌 CONEXIÓN CON GOOGLE SHEETS (BASE DE DATOS) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_datos_gsheets():
+def cargar_datos_gsheets(pestana):
     try:
-        # Intenta leer la pestaña 'historial' de la planilla
-        df = conn.read(worksheet="historial", ttl="0d")
-        # Si la planilla está vacía, nos devuelve un DataFrame limpio estructurado
+        df = conn.read(worksheet=pestana, ttl="0d")
         if df.empty or df.columns.tolist() == [0]:
-            return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+            if pestana == "historial":
+                return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+            elif pestana == "stock":
+                return pd.DataFrame(columns=["item", "cantidad", "minimo"])
+            elif pestana == "metas":
+                return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
         return df
     except Exception:
-        # Si la pestaña no existe o está en blanco, estructura la tabla de base
-        return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+        if pestana == "historial":
+            return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+        elif pestana == "stock":
+            return pd.DataFrame(columns=["item", "cantidad", "minimo"])
+        elif pestana == "metas":
+            return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
 
-def guardar_datos_gsheets(df):
-    # Sube el DataFrame actualizado a la pestaña 'historial' de Google Sheets
-    conn.update(worksheet="historial", data=df)
+def guardar_datos_gsheets(df, pestana):
+    conn.update(worksheet=pestana, data=df)
 
-# Carga de datos en tiempo real al vuelo
-df_historial = cargar_datos_gsheets()
+# Carga de datos en tiempo real al vuelo desde sus pestañas correspondientes
+df_historial = cargar_datos_gsheets("historial")
+df_stock = cargar_datos_gsheets("stock")
+df_metas = cargar_datos_gsheets("metas")
 
 # --- 🧮 CÁLCULO DE SALDOS AL VUELO ---
-# En lugar de usar variables fijas, calculamos los totales sumando y restando las filas del Excel
 caja_negocio = 0.0
 billetera_personal = 0.0
 
 if not df_historial.empty:
-    # Procesar Ingresos y Gastos del Negocio
-    ingresos_n = df_historial[(df_historial["cuenta"] == "Negocio") & (df_historial["tipo"] == "Ingreso") & (df_historial["estado_pago"] != "Presupuesto")]["monto"].astype(float).sum()
-    gastos_n = df_historial[(df_historial["cuenta"] == "Negocio") & (df_historial["tipo"] == "Gasto")]["monto"].astype(float).sum()
+    df_historial["monto"] = df_historial["monto"].astype(float)
+    ingresos_n = df_historial[(df_historial["cuenta"] == "Negocio") & (df_historial["tipo"] == "Ingreso") & (df_historial["estado_pago"] != "Presupuesto")]["monto"].sum()
+    gastos_n = df_historial[(df_historial["cuenta"] == "Negocio") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     caja_negocio = ingresos_n - gastos_n
 
-    # Procesar Ingresos y Gastos Personales
-    ingresos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Ingreso")]["monto"].astype(float).sum()
-    gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].astype(float).sum()
+    ingresos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Ingreso")]["monto"].sum()
+    gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     billetera_personal = ingresos_p - gastos_p
 
-# --- 🔐 SISTEMA DE LOGIN DE ACCESO ---
+# --- 🔐 SISTEMA DE LOGIN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
@@ -66,7 +71,7 @@ if not st.session_state.autenticado:
                     st.error("Usuario o contraseña incorrectos")
     st.stop()
 
-# --- 🔓 DISEÑO DE LA BARRA LATERAL (SIDEBAR) ---
+# --- 🔓 NAVEGACIÓN ---
 with st.sidebar:
     st.markdown("<h2 style='color: #4F46E5; margin-top: 0px;'>⚡ Panel de Control</h2>", unsafe_allow_html=True)
     if st.button("Cerrar Sesión 🔓", use_container_width=True):
@@ -76,12 +81,12 @@ with st.sidebar:
     
     seccion = st.radio(
         "Navegación:",
-        ["🏠 Dashboard General", "📝 Nueva Operación"]
+        ["🏠 Dashboard General", "📝 Nueva Operación", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro"]
     )
     st.markdown("---")
-    st.caption("FSM Pro - Edición Sincronizada")
+    st.caption("FSM Pro - Versión Full Sincronizada")
 
-# --- SECCIÓN 1: DASHBOARD GENERAL ---
+# ---🏠 DASHBOARD GENERAL ---
 if seccion == "🏠 Dashboard General":
     st.markdown("<h1 style='color: #4F46E5; margin-bottom: 0px;'>🏠 Panel de Control</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: #94A3B8; font-size: 16px;'>Sincronizado en la nube para múltiples dispositivos.</p>", unsafe_allow_html=True)
@@ -95,46 +100,30 @@ if seccion == "🏠 Dashboard General":
         with st.container(border=True):
             st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 5px;'>FONDOS DISPONIBLES EMPRENDIMIENTO</p>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='color: #38BDF8; font-size: 42px; margin-top: 0px; margin-bottom: 5px;'>$ {caja_negocio:,.2f}</h2>", unsafe_allow_html=True)
-            st.markdown("<span style='color: #64748B; font-size: 13px;'>Disponibles para compras de insumos y operación.</span>", unsafe_allow_html=True)
             
     with col2:
         with st.container(border=True):
             st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 5px;'>FINANZAS PERSONALES (LIBRE)</p>", unsafe_allow_html=True)
             st.markdown(f"<h2 style='color: #34D399; font-size: 42px; margin-top: 0px; margin-bottom: 5px;'>$ {billetera_personal:,.2f}</h2>", unsafe_allow_html=True)
-            st.markdown("<span style='color: #64748B; font-size: 13px;'>Dinero tuyo, separado de las cuentas del negocio.</span>", unsafe_allow_html=True)
         
-    # --- SALDOS DISPONIBLES POR CAJA (PREVISIÓN) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💡 Distribución Interna Recomendada (Porcentajes del Taller)")
-    
     monto_negocio_total = max(0.0, caja_negocio)
-    caja_insumos = monto_negocio_total * 0.40
-    caja_sueldos = monto_negocio_total * 0.40
-    caja_mantenimiento = monto_negocio_total * 0.20
-    
     sub_col1, sub_col2, sub_col3 = st.columns(3)
     with sub_col1:
-        with st.container(border=True):
-            st.markdown("<p style='color: #38BDF8; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🛠️ CAJA INSUMOS (40%)</p>", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_insumos:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True): st.markdown(f"<p style='color: #38BDF8; font-size:13px; font-weight:bold; margin-bottom:2px;'>🛠️ CAJA INSUMOS (40%)</p><h3>$ {monto_negocio_total * 0.40:,.2f}</h3>", unsafe_allow_html=True)
     with sub_col2:
-        with st.container(border=True):
-            st.markdown("<p style='color: #A78BFA; font-size: 13px; font-weight: bold; margin-bottom:2px;'>💰 CAJA SUELDOS (40%)</p>", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_sueldos:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True): st.markdown(f"<p style='color: #A78BFA; font-size:13px; font-weight:bold; margin-bottom:2px;'>💰 CAJA SUELDOS (40%)</p><h3>$ {monto_negocio_total * 0.40:,.2f}</h3>", unsafe_allow_html=True)
     with sub_col3:
-        with st.container(border=True):
-            st.markdown("<p style='color: #FBBF24; font-size: 13px; font-weight: bold; margin-bottom:2px;'>🔧 MANTENIMIENTO (20%)</p>", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='margin-top:0px;'>$ {caja_mantenimiento:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True): st.markdown(f"<p style='color: #FBBF24; font-size:13px; font-weight:bold; margin-bottom:2px;'>🔧 MANTENIMIENTO (20%)</p><h3>$ {monto_negocio_total * 0.20:,.2f}</h3>", unsafe_allow_html=True)
 
     st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
     
     if df_historial.empty:
         st.info("No hay movimientos registrados en la nube todavía.")
     else:
-        # Asegurar formato de tipos para procesar filtros
         df_historial["fecha"] = pd.to_datetime(df_historial["fecha"])
         df_historial["Mes"] = df_historial["fecha"].dt.strftime("%Y-%m")
-        df_historial["monto"] = df_historial["monto"].astype(float)
         
         mes_sel = st.selectbox("📆 Seleccionar Período de Análisis:", sorted(df_historial["Mes"].unique(), reverse=True))
         df_mes = df_historial[df_historial["Mes"] == mes_sel]
@@ -143,91 +132,55 @@ if seccion == "🏠 Dashboard General":
         with g_col1:
             st.markdown("### 📊 Resumen Gastos del Negocio")
             df_n_gasto = df_mes[(df_mes["cuenta"] == "Negocio") & (df_mes["tipo"] == "Gasto")]
-            if not df_n_gasto.empty:
-                st.bar_chart(df_n_gasto.groupby("categoria")["monto"].sum())
+            if not df_n_gasto.empty: st.bar_chart(df_n_gasto.groupby("categoria")["monto"].sum())
             else: st.caption("Sin egresos este mes.")
-                
         with g_col2:
             st.markdown("### 📊 Resumen Gastos Personales")
             df_p_gasto = df_mes[(df_mes["cuenta"] == "Personal") & (df_mes["tipo"] == "Gasto")]
-            if not df_p_gasto.empty:
-                st.bar_chart(df_p_gasto.groupby("categoria")["monto"].sum())
+            if not df_p_gasto.empty: st.bar_chart(df_p_gasto.groupby("categoria")["monto"].sum())
             else: st.caption("Sin egresos este mes.")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # --- HISTORIALES SEPARADOS POR PESTAÑAS (TABS) ---
-        st.subheader("📋 Libros de Registro Separados")
         tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos)"])
         
         with tab_ingresos:
-            col_b1, col_b2 = st.columns([2, 1])
-            with col_b1:
-                filto_p = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado", "📄 Presupuesto"], key="f_pago")
-            
+            filto_p = st.selectbox("🔍 Filtrar Ingresos por Estado:", ["Todos", "💰 Total Pagado", "📝 Seña", "🤝 Fiado", "📄 Presupuesto"], key="f_pago")
             df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
             if filto_p != "Todos":
                 estado_limpio = filto_p.split(" ")[1]
-                df_ingresos = df_ingresos[df_ingresos["estado_pago"] == ( "Total" if estado_limpio == "Total" else estado_limpio )]
+                df_ingresos = df_ingresos[df_ingresos["estado_pago"] == ("Total" if estado_limpio == "Total" else estado_limpio)]
             
-            with col_b2:
-                st.write("<br>", unsafe_allow_html=True) 
-                if not df_ingresos.empty:
-                    st.download_button(label="📥 Descargar CSV Ingresos", data=df_ingresos.to_csv(index=False).encode('utf-8'), file_name=f"ingresos_{mes_sel}.csv", mime="text/csv", use_container_width=True)
-            
-            if df_ingresos.empty:
-                st.info("No hay ingresos bajo este filtro.")
-            else:
-                for idx, row in df_ingresos[::-1].iterrows():
-                    with st.container(border=True):
-                        col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
-                        with col_h1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                        with col_h2: st.markdown(f"**$ {row['monto']:,.2f}**")
-                        with col_h3:
-                            st.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
-                            st.caption(f"Condición: **{row['estado_pago']}** | Cobrado por: **{row['metodo_pago']}**")
-                        with col_h4:
-                            if st.button("🗑️", key=f"del_ing_{idx}"):
-                                df_historial = df_historial.drop(idx)
-                                guardar_datos_gsheets(df_historial)
-                                st.rerun()
+            for idx, row in df_ingresos[::-1].iterrows():
+                with st.container(border=True):
+                    col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
+                    with col_h1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                    with col_h2: st.markdown(f"**$ {row['monto']:,.2f}**")
+                    with col_h3:
+                        st.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
+                        st.caption(f"Condición: **{row['estado_pago']}** | Medio: **{row['metodo_pago']}**")
+                    with col_h4:
+                        if st.button("🗑️", key=f"del_ing_{idx}"):
+                            df_historial = df_historial.drop(idx)
+                            guardar_datos_gsheets(df_historial, "historial")
+                            st.rerun()
 
         with tab_egresos:
-            col_be1, col_be2 = st.columns([2, 1])
-            with col_be1:
-                filtro_destino = st.selectbox("🔍 Filtrar Egresos por Destino:", ["Todos", "🛠️ Gastos del Negocio (Taller)", "🏠 Gastos Personales"], key="f_dest")
-            
             df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
-            if filtro_destino == "🛠️ Gastos del Negocio (Taller)":
-                df_egresos = df_egresos[df_egresos["cuenta"] == "Negocio"]
-            elif filtro_destino == "🏠 Gastos Personales":
-                df_egresos = df_egresos[df_egresos["cuenta"] == "Personal"]
-                
-            with col_be2:
-                st.write("<br>", unsafe_allow_html=True) 
-                if not df_egresos.empty:
-                    st.download_button(label="📥 Descargar CSV Egresos", data=df_egresos.to_csv(index=False).encode('utf-8'), file_name=f"egresos_{mes_sel}.csv", mime="text/csv", use_container_width=True)
+            for idx, row in df_egresos[::-1].iterrows():
+                with st.container(border=True):
+                    col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
+                    with col_e1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
+                    with col_e2: st.markdown(f"**$ {row['monto']:,.2f}**")
+                    with col_e3:
+                        lbl = "⚙️ GASTO TALLER" if row["cuenta"] == "Negocio" else "👤 PERSONAL"
+                        st.markdown(f"**{lbl}** | *{row['categoria']}*\n\n{row['detalle']}")
+                    with col_e4:
+                        if st.button("🗑️", key=f"del_egr_{idx}"):
+                            df_historial = df_historial.drop(idx)
+                            guardar_datos_gsheets(df_historial, "historial")
+                            st.rerun()
 
-            if df_egresos.empty:
-                st.info("No hay egresos bajo este filtro.")
-            else:
-                for idx, row in df_egresos[::-1].iterrows():
-                    with st.container(border=True):
-                        col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
-                        with col_e1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                        with col_e2: st.markdown(f"**$ {row['monto']:,.2f}**")
-                        with col_e3:
-                            lbl = "⚙️ GASTO TALLER" if row["cuenta"] == "Negocio" else "👤 PERSONAL"
-                            clr = "#38BDF8" if row["cuenta"] == "Negocio" else "24d399"
-                            st.markdown(f"<span style='color:{clr}; font-weight:bold;'>{lbl}</span> | *{row['categoria']}*", unsafe_allow_html=True)
-                            st.markdown(f"{row['detalle']}")
-                        with col_e4:
-                            if st.button("🗑️", key=f"del_egr_{idx}"):
-                                df_historial = df_historial.drop(idx)
-                                guardar_datos_gsheets(df_historial)
-                                st.rerun()
-
-# --- SECCIÓN 2: REGISTRAR MOVIMIENTOS ---
+# ---📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     opcion = st.selectbox("¿Qué vas a registrar hoy?", ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"])
@@ -238,60 +191,63 @@ elif seccion == "📝 Nueva Operación":
                 st.session_state.ultimo_comprobante = None
                 st.session_state.tipo_comprobante = None
 
-            monto = st.number_input("Monto total de la operación ($)", min_value=0.0, step=50.0)
+            monto = st.number_input("Monto total ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", ["Venta Producto", "Servicio", "Diseño", "Otros"])
             
             col_v1, col_v2 = st.columns(2)
             with col_v1:
-                est_pago = st.selectbox("Condición de la operación:", ["Total Pagado", "Seña", "Fiado", "Presupuesto"])
+                est_pago = st.selectbox("Condición:", ["Total Pagado", "Seña", "Fiado", "Presupuesto"])
                 estado_guardar = "Total" if est_pago == "Total Pagado" else est_pago
             with col_v2:
-                met_pago = st.selectbox("Método de cobro / Referencia:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta", "Ninguno (Presupuesto)"])
+                met_pago = st.selectbox("Medio de Cobro:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta", "Ninguno (Presupuesto)"])
             
-            cliente_nombre = st.text_input("Nombre del Cliente (Opcional, para comprobante):")
+            cliente_nombre = st.text_input("Nombre del Cliente (Opcional):")
             nota = st.text_input("Detalle del trabajo / Producto:")
             
-            if st.button("Guardar Registro e Imprimir Comprobante", type="primary"):
-                detalle_final = f"Cliente: {cliente_nombre} | {nota}" if cliente_nombre else nota
+            st.markdown("---")
+            descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
+            insumo_seleccionado = None
+            cantidad_a_descontar = 0
+            
+            if descuenta_stock and not df_stock.empty:
+                insumo_seleccionado = st.selectbox("Selecciona el insumo:", df_stock["item"].tolist())
+                cantidad_a_descontar = st.number_input("Cantidad utilizada:", min_value=1, step=1)
+
+            if st.button("Guardar e Imprimir Comprobante", type="primary"):
+                detalle_final = nota
+                if descuenta_stock and insumo_seleccionado is not None:
+                    idx_insumo = df_stock[df_stock["item"] == insumo_seleccionado].index[0]
+                    df_stock.at[idx_insumo, "cantidad"] = max(0, int(df_stock.at[idx_insumo, "cantidad"]) - cantidad_a_descontar)
+                    guardar_datos_gsheets(df_stock, "stock")
+                    detalle_final += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
                 
-                # Crear nueva fila de datos
-                nueva_fila = pd.DataFrame([{
-                    "fecha": datetime.now().strftime("%Y-%m-%d"),
-                    "cuenta": "Negocio",
-                    "tipo": "Ingreso",
-                    "monto": float(monto),
-                    "categoria": categoria,
-                    "detalle": detalle_final,
-                    "estado_pago": estado_guardar,
-                    "metodo_pago": met_pago
-                }])
+                detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
                 
-                # Concatenar a la base de datos de la nube y subir
+                nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": float(monto), "categoria": categoria, "detalle": detalle_final, "estado_pago": estado_guardar, "metodo_pago": met_pago}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gsheets(df_historial)
+                guardar_datos_gsheets(df_historial, "historial")
                 
-                # Generador de textos para enviar
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
                 nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
                 
                 if estado_guardar == "Total":
                     st.session_state.ultimo_comprobante = f"🧾 *COMPROBANTE DE PAGO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💰 *Total Abonado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n¡Muchas gracias!"
-                    st.session_state.tipo_comprobante = "¡Recibo guardado en la nube!"
+                    st.session_state.tipo_comprobante = "¡Recibo guardado!"
                 elif estado_guardar == "Seña":
-                    st.session_state.ultimo_comprobante = f"📝 *COMPROBANTE DE SEÑA*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Monto Señado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n📌 *Estado:* En producción."
-                    st.session_state.tipo_comprobante = "¡Seña guardada en la nube!"
+                    st.session_state.ultimo_comprobante = f"📝 *COMPROBANTE DE SEÑA*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Monto Señado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n📌 *Estado pedido:* En producción."
+                    st.session_state.tipo_comprobante = "¡Seña guardada!"
                 elif estado_guardar == "Presupuesto":
-                    st.session_state.ultimo_comprobante = f"📄 *PRESUPUESTO ESTIMADO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Inversión Total:* $ {monto:,.2f}\n\n⚠️ Validez: 7 días."
+                    st.session_state.ultimo_comprobante = f"📄 *PRESUPUESTO ESTIMADO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Inversión Estimada:* $ {monto:,.2f}\n\n⚠️ Validez: 7 días."
                     st.session_state.tipo_comprobante = "¡Presupuesto guardado!"
                 else:
                     st.session_state.ultimo_comprobante = f"🤝 *REGISTRO DE CUENTA CORRIENTE*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n📉 *Saldo Pendiente:* $ {monto:,.2f}"
-                    st.session_state.tipo_comprobante = "¡Fiado guardado!"
+                    st.session_state.tipo_comprobante = "¡Fiado registrado!"
                 st.rerun()
 
             if st.session_state.ultimo_comprobante:
                 st.success(st.session_state.tipo_comprobante)
-                st.text_area("Texto para WhatsApp:", value=st.session_state.ultimo_comprobante, height=150)
-                if st.button("Cargar otro movimiento"):
+                st.text_area("Texto listo para WhatsApp:", value=st.session_state.ultimo_comprobante, height=150)
+                if st.button("Limpiar Pantalla"):
                     st.session_state.ultimo_comprobante = None
                     st.rerun()
 
@@ -299,32 +255,147 @@ elif seccion == "📝 Nueva Operación":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", ["Insumos", "Publicidad", "Herramientas", "Otros"])
             met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
-            nota = st.text_input("Detalle del gasto:")
-            if st.button("Guardar Gasto en la Nube", type="primary"):
+            nota = st.text_input("Detalle:")
+            if st.button("Guardar Gasto", type="primary"):
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gsheets(df_historial)
-                st.toast("📉 Gasto sincronizado")
+                guardar_datos_gsheets(df_historial, "historial")
                 st.rerun()
 
         elif opcion == "Retirar Sueldo":
             monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=caja_negocio, step=50.0)
-            if st.button("Confirmar Retiro Multidispositivo", type="primary"):
+            if st.button("Confirmar Retiro", type="primary"):
                 f = datetime.now().strftime("%Y-%m-%d")
                 fila_g = pd.DataFrame([{"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 fila_i = pd.DataFrame([{"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto), "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 df_historial = pd.concat([df_historial, fila_g, fila_i], ignore_index=True)
-                guardar_datos_gsheets(df_historial)
-                st.toast("🔄 Traspaso sincronizado")
+                guardar_datos_gsheets(df_historial, "historial")
                 st.rerun()
 
         elif opcion == "Registrar Gasto Personal":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", ["Alimentos", "Servicios", "Ocio", "Otros"])
-            nota = st.text_input("Detalle del gasto:")
+            nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto Personal", type="primary"):
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gsheets(df_historial)
-                st.toast("🏠 Gasto personal sincronizado")
+                guardar_datos_gsheets(df_historial, "historial")
                 st.rerun()
+
+# ---📦 STOCK DE INSUMOS ---
+elif seccion == "📦 Stock de Insumos":
+    st.title("📦 Control de Inventario e Insumos Cloud")
+    
+    with st.expander("➕ Agregar Nuevo Insumo al Stock"):
+        col_i1, col_i2, col_i3 = st.columns(3)
+        with col_i1: nombre_i = st.text_input("Nombre del material:")
+        with col_i2: cant_i = st.number_input("Cantidad Inicial:", min_value=0, step=1)
+        with col_i3: minimo_i = st.number_input("Stock Mínimo Alerta:", min_value=0, step=1)
+        
+        if st.button("Registrar Insumo", type="primary"):
+            if nombre_i.strip():
+                nueva_fila = pd.DataFrame([{"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i)}])
+                df_stock = pd.concat([df_stock, nueva_fila], ignore_index=True)
+                guardar_datos_gsheets(df_stock, "stock")
+                st.rerun()
+
+    st.markdown("---")
+    if df_stock.empty:
+        st.info("No tienes insumos cargados en la nube todavía.")
+    else:
+        for idx, row in df_stock.iterrows():
+            es_critico = int(row["cantidad"]) <= int(row["minimo"])
+            color_cartel = "🔴 Falta reponer" if es_critico else "🟢 Stock Ok"
+            
+            with st.container(border=True):
+                c_name, c_status, c_cant, c_actions, c_del = st.columns([3, 2, 2, 3, 1])
+                with c_name: st.markdown(f"**{row['item']}**")
+                with c_status: st.caption(color_cartel)
+                with c_cant: st.markdown(f"Unidades: `{row['cantidad']}` (Mín: {row['minimo']})")
+                with c_actions:
+                    btn_menos, btn_mas = st.columns(2)
+                    with btn_menos: 
+                        if st.button("➖ Usar 1", key=f"min_{idx}"):
+                            df_stock.at[idx, "cantidad"] = max(0, int(row["cantidad"]) - 1)
+                            guardar_datos_gsheets(df_stock, "stock")
+                            st.rerun()
+                    with btn_mas:
+                        if st.button("➕ Sumar 1", key=f"add_{idx}"):
+                            df_stock.at[idx, "cantidad"] = int(row["cantidad"]) + 1
+                            guardar_datos_gsheets(df_stock, "stock")
+                            st.rerun()
+                with c_del:
+                    if st.button("🗑️", key=f"del_insumo_{idx}"):
+                        df_stock = df_stock.drop(idx)
+                        guardar_datos_gsheets(df_stock, "stock")
+                        st.rerun()
+
+# ---📉 PUNTO DE EQUILIBRIO ---
+elif seccion == "📉 Punto de Equilibrio":
+    st.title("📉 Análisis de Punto de Equilibrio")
+    with st.container(border=True):
+        costos_fijos = st.number_input("Costos fijos mensuales ($):", min_value=0.0, value=50000.0, step=1000.0)
+        precio_promedio = st.number_input("Precio de venta promedio ($):", min_value=1.0, value=2000.0)
+        costo_promedio = st.number_input("Costo de insumos promedio ($):", min_value=0.0, value=800.0)
+    
+    margen = precio_promedio - costo_promedio
+    if margen > 0:
+        unidades = costos_fijos / margen
+        st.markdown("---")
+        res1, res2 = st.columns(2)
+        with res1: st.metric("Unidades mensuales necesarias:", f"{int(unidades)} un.")
+        with res2: st.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
+
+# ---🎯 METAS DE AHORRO ---
+elif seccion == "🎯 Metas de Ahorro":
+    st.title("🎯 Alcancías Virtuales en la Nube")
+    
+    with st.expander("➕ Crear Nueva Meta de Ahorro"):
+        col_m1, col_m2 = st.columns(2)
+        with col_m1: nombre_m = st.text_input("¿Para qué estás ahorrando?:")
+        with col_m2: monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
+        
+        if st.button("Crear Meta", type="primary"):
+            if nombre_m.strip():
+                nueva_fila = pd.DataFrame([{"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0}])
+                df_metas = pd.concat([df_metas, nueva_fila], ignore_index=True)
+                guardar_datos_gsheets(df_metas, "metas")
+                st.rerun()
+
+    st.markdown("---")
+    if df_metas.empty:
+        st.info("No tienes metas creadas todavía.")
+    else:
+        for idx, row in df_metas.iterrows():
+            porcentaje = min(float(row["acumulado"]) / float(row["objetivo"]), 1.0) if float(row["objetivo"]) > 0 else 0.0
+            with st.container(border=True):
+                st.markdown(f"### 🚀 {row['meta']}")
+                st.write(f"Progreso: **${float(row['acumulado']):,.2f}** de **${float(row['objetivo']):,.2f}**")
+                st.progress(porcentaje)
+                
+                col_b1, col_b2, col_b3 = st.columns([2, 2, 4])
+                with col_b1:
+                    monto_poner = st.number_input("Sumar dinero ($):", min_value=0.0, max_value=billetera_personal, step=100.0, key=f"in_{idx}")
+                    if st.button("📥 Sumar", key=f"btn_in_{idx}"):
+                        df_metas.at[idx, "acumulado"] = float(row["acumulado"]) + monto_poner
+                        # Registramos el movimiento de descuento en el historial personal
+                        nueva_f = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto_poner), "categoria": "Ahorro", "detalle": f"Destinado a meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
+                        df_historial = pd.concat([df_historial, nueva_f], ignore_index=True)
+                        guardar_datos_gsheets(df_historial, "historial")
+                        guardar_datos_gsheets(df_metas, "metas")
+                        st.rerun()
+                with col_b2:
+                    monto_sacar = st.number_input("Retirar dinero ($):", min_value=0.0, max_value=float(row["acumulado"]), step=100.0, key=f"out_{idx}")
+                    if st.button("📤 Retirar", key=f"btn_out_{idx}"):
+                        df_metas.at[idx, "acumulado"] = float(row["acumulado"]) - monto_sacar
+                        nueva_f = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto_sacar), "categoria": "Ahorro", "detalle": f"Retiro de meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
+                        df_historial = pd.concat([df_historial, nueva_f], ignore_index=True)
+                        guardar_datos_gsheets(df_historial, "historial")
+                        guardar_datos_gsheets(df_metas, "metas")
+                        st.rerun()
+                with col_b3:
+                    st.write("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ Eliminar Meta", key=f"del_meta_{idx}"):
+                        df_metas = df_metas.drop(idx)
+                        guardar_datos_gsheets(df_metas, "metas")
+                        st.rerun()
