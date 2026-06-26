@@ -6,33 +6,78 @@ from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
-- 🔌 CONEXIÓN DIRECTA Y SEGURA CON GSPREAD ---
+# --- CONEXIÓN DIRECTA Y SEGURA CON GSPREAD ---
 def conectar_google_sheets():
     try:
-        # Cargamos las claves desde los Secrets
+        # Cargamos las claves desde los Secrets de Streamlit
         info_claves = dict(st.secrets["connections"]["gsheets"])
         
-        # 🔥 TRUCO MAESTRO: Reemplazamos los saltos de línea para que Google los lea bien
+        # Arreglo automático para que lea bien la clave en una o múltiples líneas
         if "private_key" in info_claves:
             info_claves["private_key"] = info_claves["private_key"].replace("\\n", "\n")
         
-        # Estructuramos los permisos oficiales
+        # Estructuramos los permisos oficiales de lectura y escritura
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
         
-        # Autenticamos
+        # Autenticamos contra Google Cloud
         credenciales = Credentials.from_service_account_info(info_claves, scopes=scopes)
         cliente = gspread.authorize(credenciales)
         
-        # Abrimos la planilla
+        # Abrimos la planilla por su nombre exacto
         return cliente.open("Base_Datos_Finanzas")
     except Exception as e:
         st.error(f"❌ Error de conexión con Google Sheets: {e}")
         st.stop()
 
-# --- 📋 PROCESAMIENTO DE CATEGORÍAS ---
+# Inicializamos la conexión oficial
+planilla_cloud = conectar_google_sheets()
+
+def cargar_datos_gspread(nombre_pestana):
+    try:
+        hoja = planilla_cloud.worksheet(nombre_pestana)
+        datos = hoja.get_all_records()
+        if not datos:
+            raise Exception("Vacío")
+        return pd.DataFrame(datos)
+    except Exception:
+        if nombre_pestana == "historial":
+            return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+        elif nombre_pestana == "stock":
+            return pd.DataFrame(columns=["item", "cantidad", "minimo"])
+        elif nombre_pestana == "metas":
+            return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
+        elif nombre_pestana == "categorias":
+            return pd.DataFrame(columns=["tipo_categoria", "nombre_categoria"])
+
+def guardar_datos_gspread(df, nombre_pestana):
+    try:
+        hoja = planilla_cloud.worksheet(nombre_pestana)
+        hoja.clear() # Limpiamos la pestaña para evitar duplicados ruidosos
+        
+        # Convertimos todo a texto plano y rellenamos vacíos para que viaje sin errores
+        df_limpio = df.copy().fillna("")
+        for col in df_limpio.columns:
+            df_limpio[col] = df_limpio[col].astype(str)
+            
+        # Insertamos encabezados y filas de un solo tiro
+        encabezados = df_limpio.columns.tolist()
+        filas = df_limpio.values.tolist()
+        hoja.append_row(encabezados)
+        if filas:
+            hoja.append_rows(filas)
+    except Exception as e:
+        st.error(f"Error crítico al guardar en la nube: {e}")
+
+# Carga de datos en tiempo real al vuelo
+df_historial = cargar_datos_gspread("historial")
+df_stock = cargar_datos_gspread("stock")
+df_metas = cargar_datos_gspread("metas")
+df_cat_cloud = cargar_datos_gspread("categorias")
+
+# --- PROCESAMIENTO DE CATEGORÍAS ---
 if df_cat_cloud.empty:
     categorias_ingreso = ["Venta Producto", "Servicio", "Diseño", "Otros"]
     categorias_gasto_negocio = ["Insumos", "Publicidad", "Herramientas", "Otros"]
@@ -46,7 +91,7 @@ else:
     if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
     if not categorias_gasto_personal: categorias_gasto_personal = ["Otros"]
 
-# --- 🧮 CÁLCULO DE SALDOS AL VUELO ---
+# --- CÁLCULO DE SALDOS AL VUELO ---
 caja_negocio = 0.0
 billetera_personal = 0.0
 
@@ -60,7 +105,7 @@ if not df_historial.empty:
     gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     billetera_personal = ingresos_p - gastos_p
 
-# --- 🔐 SISTEMA DE LOGIN ---
+# --- SISTEMA DE LOGIN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
@@ -82,7 +127,7 @@ if not st.session_state.autenticado:
                     st.error("Usuario o contraseña incorrectos")
     st.stop()
 
-# --- 🔓 NAVEGACIÓN ---
+# --- NAVEGACIÓN ---
 with st.sidebar:
     st.markdown("<h2 style='color: #4F46E5; margin-top: 0px;'>⚡ Panel de Control</h2>", unsafe_allow_html=True)
     if st.button("Cerrar Sesión 🔓", use_container_width=True):
