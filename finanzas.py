@@ -11,13 +11,15 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def cargar_datos_gsheets(pestana):
     try:
         df = conn.read(worksheet=pestana, ttl="0d")
-        if df.empty or df.columns.tolist() == [0]:
+        if df.empty or df.columns.tolist() == [0] or df.columns.tolist() == [""]:
             if pestana == "historial":
                 return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
             elif pestana == "stock":
                 return pd.DataFrame(columns=["item", "cantidad", "minimo"])
             elif pestana == "metas":
                 return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
+            elif pestana == "categorias":
+                return pd.DataFrame(columns=["tipo_categoria", "nombre_categoria"])
         return df
     except Exception:
         if pestana == "historial":
@@ -26,14 +28,34 @@ def cargar_datos_gsheets(pestana):
             return pd.DataFrame(columns=["item", "cantidad", "minimo"])
         elif pestana == "metas":
             return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
+        elif pestana == "categorias":
+            return pd.DataFrame(columns=["tipo_categoria", "nombre_categoria"])
 
 def guardar_datos_gsheets(df, pestana):
+    # Forzar que no se guarden índices numéricos raros
     conn.update(worksheet=pestana, data=df)
 
-# Carga de datos en tiempo real al vuelo desde sus pestañas correspondientes
+# Carga de datos en tiempo real desde la nube
 df_historial = cargar_datos_gsheets("historial")
 df_stock = cargar_datos_gsheets("stock")
 df_metas = cargar_datos_gsheets("metas")
+df_cat_cloud = cargar_datos_gsheets("categorias")
+
+# --- 📋 PROCESAMIENTO DE CATEGORÍAS ---
+# Si la nube no tiene categorías, usamos las del taller por defecto para arrancar
+if df_cat_cloud.empty:
+    categorias_ingreso = ["Venta Producto", "Servicio", "Diseño", "Otros"]
+    categorias_gasto_negocio = ["Insumos", "Publicidad", "Herramientas", "Otros"]
+    categorias_gasto_personal = ["Alimentos", "Servicios", "Ocio", "Otros"]
+else:
+    categorias_ingreso = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Ingreso"]["nombre_categoria"].tolist()
+    categorias_gasto_negocio = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Negocio"]["nombre_categoria"].tolist()
+    categorias_gasto_personal = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Personal"]["nombre_categoria"].tolist()
+    
+    # Asegurar que siempre tengan al menos "Otros" por seguridad
+    if not categorias_ingreso: categorias_ingreso = ["Otros"]
+    if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
+    if not categorias_gasto_personal: categorias_gasto_personal = ["Otros"]
 
 # --- 🧮 CÁLCULO DE SALDOS AL VUELO ---
 caja_negocio = 0.0
@@ -81,15 +103,15 @@ with st.sidebar:
     
     seccion = st.radio(
         "Navegación:",
-        ["🏠 Dashboard General", "📝 Nueva Operación", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro"]
+        ["🏠 Dashboard General", "📝 Nueva Operación", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
     )
     st.markdown("---")
-    st.caption("FSM Pro - Versión Full Sincronizada")
+    st.caption("FSM Pro - Sincronización Multi-Dispositivo")
 
-# ---🏠 DASHBOARD GENERAL ---
+# --- 🏠 DASHBOARD GENERAL ---
 if seccion == "🏠 Dashboard General":
     st.markdown("<h1 style='color: #4F46E5; margin-bottom: 0px;'>🏠 Panel de Control</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #94A3B8; font-size: 16px;'>Sincronizado en la nube para múltiples dispositivos.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94A3B8; font-size: 16px;'>Sincronizado en la nube en tiempo real.</p>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     
     if caja_negocio < 10000:
@@ -180,7 +202,7 @@ if seccion == "🏠 Dashboard General":
                             guardar_datos_gsheets(df_historial, "historial")
                             st.rerun()
 
-# ---📝 NUEVA OPERACIÓN ---
+# --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     opcion = st.selectbox("¿Qué vas a registrar hoy?", ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"])
@@ -192,7 +214,7 @@ elif seccion == "📝 Nueva Operación":
                 st.session_state.tipo_comprobante = None
 
             monto = st.number_input("Monto total ($)", min_value=0.0, step=50.0)
-            categoria = st.selectbox("Categoría", ["Venta Producto", "Servicio", "Diseño", "Otros"])
+            categoria = st.selectbox("Categoría", categorias_ingreso)
             
             col_v1, col_v2 = st.columns(2)
             with col_v1:
@@ -253,7 +275,7 @@ elif seccion == "📝 Nueva Operación":
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
-            categoria = st.selectbox("Categoría", ["Insumos", "Publicidad", "Herramientas", "Otros"])
+            categoria = st.selectbox("Categoría", categorias_gasto_negocio)
             met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto", type="primary"):
@@ -274,7 +296,7 @@ elif seccion == "📝 Nueva Operación":
 
         elif opcion == "Registrar Gasto Personal":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
-            categoria = st.selectbox("Categoría", ["Alimentos", "Servicios", "Ocio", "Otros"])
+            categoria = st.selectbox("Categoría", categorias_gasto_personal)
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto Personal", type="primary"):
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"}])
@@ -282,7 +304,7 @@ elif seccion == "📝 Nueva Operación":
                 guardar_datos_gsheets(df_historial, "historial")
                 st.rerun()
 
-# ---📦 STOCK DE INSUMOS ---
+# --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
     st.title("📦 Control de Inventario e Insumos Cloud")
     
@@ -330,7 +352,7 @@ elif seccion == "📦 Stock de Insumos":
                         guardar_datos_gsheets(df_stock, "stock")
                         st.rerun()
 
-# ---📉 PUNTO DE EQUILIBRIO ---
+# --- 📉 PUNTO DE EQUILIBRIO ---
 elif seccion == "📉 Punto de Equilibrio":
     st.title("📉 Análisis de Punto de Equilibrio")
     with st.container(border=True):
@@ -346,7 +368,7 @@ elif seccion == "📉 Punto de Equilibrio":
         with res1: st.metric("Unidades mensuales necesarias:", f"{int(unidades)} un.")
         with res2: st.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
 
-# ---🎯 METAS DE AHORRO ---
+# --- 🎯 METAS DE AHORRO ---
 elif seccion == "🎯 Metas de Ahorro":
     st.title("🎯 Alcancías Virtuales en la Nube")
     
@@ -378,7 +400,6 @@ elif seccion == "🎯 Metas de Ahorro":
                     monto_poner = st.number_input("Sumar dinero ($):", min_value=0.0, max_value=billetera_personal, step=100.0, key=f"in_{idx}")
                     if st.button("📥 Sumar", key=f"btn_in_{idx}"):
                         df_metas.at[idx, "acumulado"] = float(row["acumulado"]) + monto_poner
-                        # Registramos el movimiento de descuento en el historial personal
                         nueva_f = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto_poner), "categoria": "Ahorro", "detalle": f"Destinado a meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                         df_historial = pd.concat([df_historial, nueva_f], ignore_index=True)
                         guardar_datos_gsheets(df_historial, "historial")
@@ -399,3 +420,65 @@ elif seccion == "🎯 Metas de Ahorro":
                         df_metas = df_metas.drop(idx)
                         guardar_datos_gsheets(df_metas, "metas")
                         st.rerun()
+
+# --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS (LA PESTAÑA QUE FALTABA) ---
+elif seccion == "⚙️ Configurar Categorías":
+    st.title("⚙️ Gestión Personalizada de Categorías")
+    st.markdown("Agregá o eliminá las categorías de tu negocio. Se actualizarán al instante en todos tus dispositivos conectados.")
+    
+    with st.container(border=True):
+        st.subheader("➕ Agregar Nueva Categoría")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            tipo_nueva = st.selectbox("¿A qué módulo pertenece?", ["Ingreso", "Gasto Negocio", "Gasto Personal"])
+        with col_c2:
+            nombre_nueva = st.text_input("Nombre de la categoría (Ej: Impresiones, Yerba, Envíos):")
+            
+        if st.button("Guardar Nueva Categoría", type="primary"):
+            if nombre_nueva.strip():
+                nueva_cat_df = pd.DataFrame([{"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip()}])
+                df_cat_cloud = pd.concat([df_cat_cloud, nueva_cat_df], ignore_index=True)
+                guardar_datos_gsheets(df_cat_cloud, "categorias")
+                st.toast(f"✅ Categoría '{nombre_nueva}' agregada")
+                st.rerun()
+                
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("📋 Categorías Activas Actualmente")
+    
+    if df_cat_cloud.empty:
+        st.info("Actualmente estás usando las categorías estándar del taller. Agregá una arriba para empezar a personalizar tus libros.")
+    else:
+        tab_ver_i, tab_ver_gn, tab_ver_gp = st.tabs(["📥 Categorías de Ventas", "🛠️ Categorías de Taller", "🏠 Categorías Personales"])
+        
+        with tab_ver_i:
+            cats = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Ingreso"]
+            if cats.empty: st.caption("Usando lista por defecto.")
+            for idx, r in cats.iterrows():
+                col_v_n, col_v_b = st.columns([5, 1])
+                col_v_n.markdown(f"▪️ {r['nombre_categoria']}")
+                if col_v_b.button("🗑️", key=f"del_cat_{idx}"):
+                    df_cat_cloud = df_cat_cloud.drop(idx)
+                    guardar_datos_gsheets(df_cat_cloud, "categorias")
+                    st.rerun()
+                    
+        with tab_ver_gn:
+            cats = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Negocio"]
+            if cats.empty: st.caption("Usando lista por defecto.")
+            for idx, r in cats.iterrows():
+                col_v_n, col_v_b = st.columns([5, 1])
+                col_v_n.markdown(f"▪️ {r['nombre_categoria']}")
+                if col_v_b.button("🗑️", key=f"del_cat_{idx}"):
+                    df_cat_cloud = df_cat_cloud.drop(idx)
+                    guardar_datos_gsheets(df_cat_cloud, "categorias")
+                    st.rerun()
+                    
+        with tab_ver_gp:
+            cats = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Personal"]
+            if cats.empty: st.caption("Usando lista por defecto.")
+            for idx, r in cats.iterrows():
+                col_v_n, col_v_b = st.columns([5, 1])
+                col_v_n.markdown(f"▪️ {r['nombre_categoria']}")
+                if col_v_b.button("🗑️", key=f"del_cat_{idx}"):
+                    df_cat_cloud = df_cat_cloud.drop(idx)
+                    guardar_datos_gsheets(df_cat_cloud, "categorias")
+                    st.rerun()
