@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
@@ -10,9 +9,19 @@ st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", pag
 # --- CONEXIÓN DIRECTA Y SEGURA CON GSPREAD ---
 def conectar_google_sheets():
     try:
-        # Leemos el bloque crudo empaquetado en JSON desde los Secrets
-        texto_json = st.secrets["connections"]["gsheets"]["json_completo"]
-        info_claves = json.loads(texto_json)
+        # Leemos el formato desglosado directo desde los Secrets de Streamlit
+        info_claves = {
+            "type": st.secrets["connections"]["gsheets"]["type"],
+            "project_id": st.secrets["connections"]["gsheets"]["project_id"],
+            "private_key_id": st.secrets["connections"]["gsheets"]["private_key_id"],
+            "private_key": st.secrets["connections"]["gsheets"]["private_key"],
+            "client_email": st.secrets["connections"]["gsheets"]["client_email"],
+            "client_id": st.secrets["connections"]["gsheets"]["client_id"],
+            "auth_uri": st.secrets["connections"]["gsheets"]["auth_uri"],
+            "token_uri": st.secrets["connections"]["gsheets"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["connections"]["gsheets"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["connections"]["gsheets"]["client_x509_cert_url"]
+        }
         
         # Formateamos los saltos de línea internos de la firma digital de Google
         if "private_key" in info_claves:
