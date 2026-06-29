@@ -1,94 +1,43 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from google.oauth2.service_account import Credentials
+import os
 from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
-# --- CONEXIÓN DIRECTA CON CREDENCIALES INCRUSTADAS ---
-def conectar_google_sheets():
-    try:
-        # Colocamos las claves directamente en el código para saltear el validador web
-        info_claves = {
-            "type": "service_account",
-            "project_id": "earnest-mark-434421-p0",
-            "private_key_id": "1e7c7fe00fc54fd583f9b8eb967701b931c606f7",
-            "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDHnG7tPfEidcvM\ncPDzPVmehBP+416OV+MKpEW7UFziRN4ge00Q6YFyrVt7rXvD+GpuP/JokfU86cQ2\nBpvCJ+IJbUgxRhZLFwK06jiBlusIIm/cskO4ihKTLbl7s37oF2WqOO0u1MdS2/pS\n00hPR+voYPeckvadJZwoLHR47vV5wa+pNsUnyBwnVO9yJmkibZdJJ7gvGoxK2XxW\nXk8nxiWFBDLvcwyPrw5s8biO5H9wy1dhkHsun2Bp2WOnfTWO4yApPpM87WmPCUV+\nY+eVLsMto4retrc5f2VNtbkXnXau4SSSmUK74oHlFbVFVP30FzhA1wtZuImAobgA\nsvbpfxIxAgMBAAECggEAG9O0yhmDw3ZRADHxgTNZCkZm5DZtwOHDKsFeYD/Shw+r\nOLN/uZ8X1vUQZxQ3CAmaSr7a7BWG7uQ24II41g8JzZ8gvI/E/Vhanf51/KjdoI9u\ncUGfu7rx3nc2H6bVBwV1/I49kHUEyYoVolTGhJjl7AoSks8RFrS+yYHzBcXoTj4A\n9Ggu0r/FVJchpuYbpgSDlgbGY4Ur5AE15/cmPfge+xqubRcLl9BhZEbBlB65eWn5\n/9S7nC8h/uAft7ZJy96tQh18kA+aeP+xuxiwe3JmV/0cugtf2uDHv8HuGQsnV1IK\nFjyuoa3o+Vry1BbZJ43L7n0f3QF91DZx63qYJF1XfQKBgQD8pHZPfPYzMSmdpYZf\n3J9Xft+4yyIq2Iy2BdHXPYAUVucdA8Qg7gHjmMh0BgMMT8lU2/OvrJqq+P9hOp0p\nDqwkUGsLZc2HSi+EUddRq5lU3mRJ3M4nyDTf66YTZGHNJopGfY0OaUBrRz9LwqH3\nhqiXvXGdiuQhwhF8gFCzMHz5ZQKBgQDKQ4xe3FYLVRMqkfNRbaVZyOmCOtPr+wzF\nm/TmrQStHtoflkdC6yc9HyAPZAhVCc73ZXIblcelyMaaU+GG02hb3waic4PRMA/Z\nJrWMivg6qhNx+4KOMEX4n00mFSgippyOdHaNSnwvyQo5M9wBQONop2aRYguPjGZE\ntVIZuLNO3QKBgHXSrWp8uMU/FE11OKnUVmuTu/qOoayhuV3acPaUs/rIXJhnfTxu\nQ2tFgZa6hwli3F47BfbT5H4ACfnqQAk50oZNCt8R5zxFGMv47xYjlSrDXLolw+9B\nq4cSey1oD0SByNL/Ep258FUXsSk/6BFsN4wsyaPTdnlX7JfHr9shrecRAoGAKNGd\nAH/i9YKDzbGKs0I3fnkndtq8bgFKQI8Ky4rbSLzTNFC1rPGcB5/Cbpi3fcHu/MqC\nTsLZecGdIwQOnZEInJHT2vEJByx15lMDjIt3MQ+lwPkLDfr8BALSJP9cDDInojAq\nxLTlfxdJcuXeXnpj6njuICTzRFMHSJJ3MS2vMhkCgYAkEjDSFdDgmoXOKleSAZ6v\nMwwXT4OWF9iJfOe/jqlg5Tc1WkZ5fuwO5x9LsziayIH5yNpQ5qz6STUsByErmeGL\nGy2mQQeLPezBbjQTPOf/Bw7eWJp4pDVKHh5DiMRZDo766gThA78eud4QpVxVJRjr\nqSVmX179XJMCHZqmRslUjQ==\n-----END PRIVATE KEY-----\n",
-            "client_email": "streamlit-cloud@earnest-mark-434421-p0.iam.gserviceaccount.com",
-            "client_id": "106814197220980997705",
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/streamlit-cloud%40earnest-mark-434421-p0.iam.gserviceaccount.com"
-        }
-        
-        # Limpiamos los saltos de línea para que Google valide la firma correctamente
-        if "private_key" in info_claves:
-            info_claves["private_key"] = info_claves["private_key"].replace("\\n", "\n")
-        
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        credenciales = Credentials.from_service_account_info(info_claves, scopes=scopes)
-        cliente = gspread.authorize(credenciales)
-        return cliente.open("Base_Datos_Finanzas")
-    except Exception as e:
-        st.error(f"❌ Error de conexión con Google Sheets: {e}")
-        st.stop()
+# --- FUNCIONES DE BASE DE DATOS LOCAL (CSV) ---
+def cargar_datos_local(nombre_archivo, columnas):
+    if os.path.exists(nombre_archivo):
+        try:
+            return pd.read_csv(nombre_archivo)
+        except Exception:
+            return pd.DataFrame(columns=columnas)
+    return pd.DataFrame(columns=columnas)
 
-# Inicializamos la conexión oficial
-planilla_cloud = conectar_google_sheets()
+def guardar_datos_local(df, nombre_archivo):
+    df.to_csv(nombre_archivo, index=False)
 
-def cargar_datos_gspread(nombre_pestana):
-    try:
-        hoja = planilla_cloud.worksheet(nombre_pestana)
-        datos = hoja.get_all_records()
-        if not datos:
-            raise Exception("Vacío")
-        return pd.DataFrame(datos)
-    except Exception:
-        if nombre_pestana == "historial":
-            return pd.DataFrame(columns=["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
-        elif nombre_pestana == "stock":
-            return pd.DataFrame(columns=["item", "cantidad", "minimo"])
-        elif nombre_pestana == "metas":
-            return pd.DataFrame(columns=["meta", "objetivo", "acumulado"])
-        elif nombre_pestana == "categorias":
-            return pd.DataFrame(columns=["tipo_categoria", "nombre_categoria"])
+# Archivos Locales
+FILE_HISTORIAL = "historial_local.csv"
+FILE_STOCK = "stock_local.csv"
+FILE_METAS = "metas_local.csv"
+FILE_CATEGORIAS = "categorias_local.csv"
 
-def guardar_datos_gspread(df, nombre_pestana):
-    try:
-        hoja = planilla_cloud.worksheet(nombre_pestana)
-        hoja.clear()
-        df_limpio = df.copy().fillna("")
-        for col in df_limpio.columns:
-            df_limpio[col] = df_limpio[col].astype(str)
-        encabezados = df_limpio.columns.tolist()
-        filas = df_limpio.values.tolist()
-        hoja.append_row(encabezados)
-        if filas:
-            hoja.append_rows(filas)
-    except Exception as e:
-        st.error(f"Error crítico al guardar en la nube: {e}")
-
-# Carga de datos en tiempo real al vuelo
-df_historial = cargar_datos_gspread("historial")
-df_stock = cargar_datos_gspread("stock")
-df_metas = cargar_datos_gspread("metas")
-df_cat_cloud = cargar_datos_gspread("categorias")
+# Carga inicial de datos
+df_historial = cargar_datos_local(FILE_HISTORIAL, ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"])
+df_stock = cargar_datos_local(FILE_STOCK, ["item", "cantidad", "minimo"])
+df_metas = cargar_datos_local(FILE_METAS, ["meta", "objetivo", "acumulado"])
+df_cat_local = cargar_datos_local(FILE_CATEGORIAS, ["tipo_categoria", "nombre_categoria"])
 
 # --- PROCESAMIENTO DE CATEGORÍAS ---
-if df_cat_cloud.empty:
+if df_cat_local.empty:
     categorias_ingreso = ["Venta Producto", "Servicio", "Diseño", "Otros"]
     categorias_gasto_negocio = ["Insumos", "Publicidad", "Herramientas", "Otros"]
     categorias_gasto_personal = ["Alimentos", "Servicios", "Ocio", "Otros"]
 else:
-    categorias_ingreso = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Ingreso"]["nombre_categoria"].tolist()
-    categorias_gasto_negocio = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Negocio"]["nombre_categoria"].tolist()
-    categorias_gasto_personal = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Personal"]["nombre_categoria"].tolist()
+    categorias_ingreso = df_cat_local[df_cat_local["tipo_categoria"] == "Ingreso"]["nombre_categoria"].tolist()
+    categorias_gasto_negocio = df_cat_local[df_cat_local["tipo_categoria"] == "Gasto Negocio"]["nombre_categoria"].tolist()
+    categorias_gasto_personal = df_cat_local[df_cat_local["tipo_categoria"] == "Gasto Personal"]["nombre_categoria"].tolist()
     
     if not categorias_ingreso: categorias_ingreso = ["Otros"]
     if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
@@ -142,11 +91,11 @@ with st.sidebar:
         ["🏠 Dashboard General", "📝 Nueva Operación", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
     )
     st.markdown("---")
-    st.caption("FSM Pro - Versión Gspread Cloud")
+    st.caption("FSM Pro - Versión Local Estable")
 
 # --- 🏠 DASHBOARD GENERAL ---
 if seccion == "🏠 Dashboard General":
-    st.title("🏠 Panel de Control Sincronizado")
+    st.title("🏠 Panel de Control General")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -159,7 +108,7 @@ if seccion == "🏠 Dashboard General":
             st.markdown(f"<h2 style='color: #34D399; font-size: 42px; margin-top: 0px;'>$ {billetera_personal:,.2f}</h2>", unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("💡 Distribución Interna Recomendada (Porcentajes del Taller)")
+    st.subheader("💡 Distribución Interna Recomendada")
     monto_negocio_total = max(0.0, caja_negocio)
     sub_col1, sub_col2, sub_col3 = st.columns(3)
     with sub_col1:
@@ -195,7 +144,7 @@ if seccion == "🏠 Dashboard General":
                     with col_h4:
                         if st.button("🗑️", key=f"del_ing_{idx}"):
                             df_historial = df_historial.drop(idx)
-                            guardar_datos_gspread(df_historial, "historial")
+                            guardar_datos_local(df_historial, FILE_HISTORIAL)
                             st.rerun()
 
         with tab_egresos:
@@ -211,7 +160,7 @@ if seccion == "🏠 Dashboard General":
                     with col_e4:
                         if st.button("🗑️", key=f"del_egr_{idx}"):
                             df_historial = df_historial.drop(idx)
-                            guardar_datos_gspread(df_historial, "historial")
+                            guardar_datos_local(df_historial, FILE_HISTORIAL)
                             st.rerun()
 
 # --- 📝 NUEVA OPERACIÓN ---
@@ -241,25 +190,25 @@ elif seccion == "📝 Nueva Operación":
             st.markdown("---")
             descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
             insumo_seleccionado = None
-            cantidad_a_descontar = 0
+            amount_to_discount = 0
             
             if descuenta_stock and not df_stock.empty:
                 insumo_seleccionado = st.selectbox("Selecciona el insumo:", df_stock["item"].tolist())
-                cantidad_a_descontar = st.number_input("Cantidad utilizada:", min_value=1, step=1)
+                amount_to_discount = st.number_input("Cantidad utilizada:", min_value=1, step=1)
 
             if st.button("Guardar e Imprimir Comprobante", type="primary"):
                 detalle_final = nota
                 if descuenta_stock and insumo_seleccionado is not None:
                     idx_insumo = df_stock[df_stock["item"] == insumo_seleccionado].index[0]
-                    df_stock.at[idx_insumo, "cantidad"] = max(0, int(df_stock.at[idx_insumo, "cantidad"]) - cantidad_a_descontar)
-                    guardar_datos_gspread(df_stock, "stock")
-                    detalle_final += f" (Consumió {cantidad_a_descontar} un. de {insumo_seleccionado})"
+                    df_stock.at[idx_insumo, "cantidad"] = max(0, int(df_stock.at[idx_insumo, "cantidad"]) - amount_to_discount)
+                    guardar_datos_local(df_stock, FILE_STOCK)
+                    detalle_final += f" (Consumió {amount_to_discount} un. de {insumo_seleccionado})"
                 
                 detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
                 
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": float(monto), "categoria": categoria, "detalle": detalle_final, "estado_pago": estado_guardar, "metodo_pago": met_pago}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gspread(df_historial, "historial")
+                guardar_datos_local(df_historial, FILE_HISTORIAL)
                 
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
                 nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
@@ -293,7 +242,7 @@ elif seccion == "📝 Nueva Operación":
             if st.button("Guardar Gasto", type="primary"):
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gspread(df_historial, "historial")
+                guardar_datos_local(df_historial, FILE_HISTORIAL)
                 st.rerun()
 
         elif opcion == "Retirar Sueldo":
@@ -303,7 +252,7 @@ elif seccion == "📝 Nueva Operación":
                 fila_g = pd.DataFrame([{"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 fila_i = pd.DataFrame([{"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto), "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 df_historial = pd.concat([df_historial, fila_g, fila_i], ignore_index=True)
-                guardar_datos_gspread(df_historial, "historial")
+                guardar_datos_local(df_historial, FILE_HISTORIAL)
                 st.rerun()
 
         elif opcion == "Registrar Gasto Personal":
@@ -313,12 +262,12 @@ elif seccion == "📝 Nueva Operación":
             if st.button("Guardar Gasto Personal", type="primary"):
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
-                guardar_datos_gspread(df_historial, "historial")
+                guardar_datos_local(df_historial, FILE_HISTORIAL)
                 st.rerun()
 
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
-    st.title("📦 Control de Inventario e Insumos Cloud")
+    st.title("📦 Control de Inventario e Insumos")
     
     with st.expander("➕ Agregar Nuevo Insumo al Stock"):
         col_i1, col_i2, col_i3 = st.columns(3)
@@ -330,12 +279,12 @@ elif seccion == "📦 Stock de Insumos":
             if nombre_i.strip():
                 nueva_fila = pd.DataFrame([{"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i)}])
                 df_stock = pd.concat([df_stock, nueva_fila], ignore_index=True)
-                guardar_datos_gspread(df_stock, "stock")
+                guardar_datos_local(df_stock, FILE_STOCK)
                 st.rerun()
 
     st.markdown("---")
     if df_stock.empty:
-        st.info("No tienes insumos cargados en la nube todavía.")
+        st.info("No tienes insumos cargados todavía.")
     else:
         for idx, row in df_stock.iterrows():
             es_critico = int(row["cantidad"]) <= int(row["minimo"])
@@ -351,17 +300,17 @@ elif seccion == "📦 Stock de Insumos":
                     with btn_menos: 
                         if st.button("➖ Usar 1", key=f"min_{idx}"):
                             df_stock.at[idx, "cantidad"] = max(0, int(row["cantidad"]) - 1)
-                            guardar_datos_gspread(df_stock, "stock")
+                            guardar_datos_local(df_stock, FILE_STOCK)
                             st.rerun()
                     with btn_mas:
                         if st.button("➕ Sumar 1", key=f"add_{idx}"):
                             df_stock.at[idx, "cantidad"] = int(row["cantidad"]) + 1
-                            guardar_datos_gspread(df_stock, "stock")
+                            guardar_datos_local(df_stock, FILE_STOCK)
                             st.rerun()
                 with c_del:
                     if st.button("🗑️", key=f"del_insumo_{idx}"):
                         df_stock = df_stock.drop(idx)
-                        guardar_datos_gspread(df_stock, "stock")
+                        guardar_datos_local(df_stock, FILE_STOCK)
                         st.rerun()
 
 # --- 📉 PUNTO DE EQUILIBRIO ---
@@ -382,7 +331,7 @@ elif seccion == "📉 Punto de Equilibrio":
 
 # --- 🎯 METAS DE AHORRO ---
 elif seccion == "🎯 Metas de Ahorro":
-    st.title("🎯 Alcancías Virtuales en la Nube")
+    st.title("🎯 Alcancías Virtuales")
     
     with st.expander("➕ Crear Nueva Meta de Ahorro"):
         col_m1, col_m2 = st.columns(2)
@@ -393,7 +342,7 @@ elif seccion == "🎯 Metas de Ahorro":
             if nombre_m.strip():
                 nueva_fila = pd.DataFrame([{"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0}])
                 df_metas = pd.concat([df_metas, nueva_fila], ignore_index=True)
-                guardar_datos_gspread(df_metas, "metas")
+                guardar_datos_local(df_metas, FILE_METAS)
                 st.rerun()
 
     st.markdown("---")
@@ -414,8 +363,8 @@ elif seccion == "🎯 Metas de Ahorro":
                         df_metas.at[idx, "acumulado"] = float(row["acumulado"]) + monto_poner
                         nueva_f = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto_poner), "categoria": "Ahorro", "detalle": f"Destinado a meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                         df_historial = pd.concat([df_historial, nueva_f], ignore_index=True)
-                        guardar_datos_gspread(df_historial, "historial")
-                        guardar_datos_gspread(df_metas, "metas")
+                        guardar_datos_local(df_historial, FILE_HISTORIAL)
+                        guardar_datos_local(df_metas, FILE_METAS)
                         st.rerun()
                 with col_b2:
                     monto_sacar = st.number_input("Retirar dinero ($):", min_value=0.0, max_value=float(row["acumulado"]), step=100.0, key=f"out_{idx}")
@@ -423,14 +372,14 @@ elif seccion == "🎯 Metas de Ahorro":
                         df_metas.at[idx, "acumulado"] = float(row["acumulado"]) - monto_sacar
                         nueva_f = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto_sacar), "categoria": "Ahorro", "detalle": f"Retiro de meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                         df_historial = pd.concat([df_historial, nueva_f], ignore_index=True)
-                        guardar_datos_gspread(df_historial, "historial")
-                        guardar_datos_gspread(df_metas, "metas")
+                        guardar_datos_local(df_historial, FILE_HISTORIAL)
+                        guardar_datos_local(df_metas, FILE_METAS)
                         st.rerun()
                 with col_b3:
                     st.write("<br>", unsafe_allow_html=True)
                     if st.button("🗑️ Eliminar Meta", key=f"del_meta_{idx}"):
                         df_metas = df_metas.drop(idx)
-                        guardar_datos_gspread(df_metas, "metas")
+                        guardar_datos_local(df_metas, FILE_METAS)
                         st.rerun()
 
 # --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
@@ -448,18 +397,18 @@ elif seccion == "⚙️ Configurar Categorías":
         if st.button("Guardar Nueva Categoría", type="primary"):
             if nombre_nueva.strip():
                 nueva_cat_df = pd.DataFrame([{"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip()}])
-                df_cat_cloud = pd.concat([df_cat_cloud, nueva_cat_df], ignore_index=True)
-                guardar_datos_gspread(df_cat_cloud, "categorias")
+                df_cat_local = pd.concat([df_cat_local, nueva_cat_df], ignore_index=True)
+                guardar_datos_local(df_cat_local, FILE_CATEGORIAS)
                 st.toast(f"✅ Categoría '{nombre_nueva}' agregada")
                 st.rerun()
                 
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📋 Categorías Activas")
-    if not df_cat_cloud.empty:
-        for idx, r in df_cat_cloud.iterrows():
+    if not df_cat_local.empty:
+        for idx, r in df_cat_local.iterrows():
             col_v_n, col_v_b = st.columns([5, 1])
             col_v_n.markdown(f"▪️ **{r['tipo_categoria']}**: {r['nombre_categoria']}")
             if col_v_b.button("🗑️", key=f"del_cat_{idx}"):
-                df_cat_cloud = df_cat_cloud.drop(idx)
-                guardar_datos_gspread(df_cat_cloud, "categorias")
+                df_cat_local = df_cat_local.drop(idx)
+                guardar_datos_local(df_cat_local, FILE_CATEGORIAS)
                 st.rerun()
