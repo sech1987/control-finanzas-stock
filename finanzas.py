@@ -186,24 +186,9 @@ elif seccion == "📝 Nueva Operación":
             
             cliente_nombre = st.text_input("Nombre del Cliente (Opcional):")
             nota = st.text_input("Detalle del trabajo / Producto:")
-            
-            st.markdown("---")
-            descuenta_stock = st.checkbox("¿Esta venta consumió algún insumo del stock?")
-            insumo_seleccionado = None
-            amount_to_discount = 0
-            
-            if descuenta_stock and not df_stock.empty:
-                insumo_seleccionado = st.selectbox("Selecciona el insumo:", df_stock["item"].tolist())
-                amount_to_discount = st.number_input("Cantidad utilizada:", min_value=1, step=1)
 
             if st.button("Guardar e Imprimir Comprobante", type="primary"):
                 detalle_final = nota
-                if descuenta_stock and insumo_seleccionado is not None:
-                    idx_insumo = df_stock[df_stock["item"] == insumo_seleccionado].index[0]
-                    df_stock.at[idx_insumo, "cantidad"] = max(0, int(df_stock.at[idx_insumo, "cantidad"]) - amount_to_discount)
-                    guardar_datos_local(df_stock, FILE_STOCK)
-                    detalle_final += f" (Consumió {amount_to_discount} un. de {insumo_seleccionado})"
-                
                 detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
                 
                 nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": float(monto), "categoria": categoria, "detalle": detalle_final, "estado_pago": estado_guardar, "metodo_pago": met_pago}])
@@ -267,7 +252,7 @@ elif seccion == "📝 Nueva Operación":
 
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
-    st.title("📦 Control de Inventario e Insumos")
+    st.title("📦 Control de Inventario e Insumos (Manual)")
     
     with st.expander("➕ Agregar Nuevo Insumo al Stock"):
         col_i1, col_i2, col_i3 = st.columns(3)
