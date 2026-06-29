@@ -1,5 +1,3 @@
-
-Python
 import streamlit as st
 import pandas as pd
 import gspread
@@ -8,7 +6,7 @@ from datetime import datetime
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
-# --- CONEXIÓN DIRECTA Y SEGURA CON GSPREAD (MODIFICADA) ---
+# --- CONEXIÓN DIRECTA Y SEGURA CON GSPREAD ---
 def conectar_google_sheets():
     try:
         # Leemos el formato desglosado directo desde los Secrets de Streamlit
@@ -100,7 +98,7 @@ else:
     categorias_gasto_negocio = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Negocio"]["nombre_categoria"].tolist()
     categorias_gasto_personal = df_cat_cloud[df_cat_cloud["tipo_categoria"] == "Gasto Personal"]["nombre_categoria"].tolist()
     
-    if not ...: categorias_ingreso = ["Otros"]
+    if not categorias_ingreso: categorias_ingreso = ["Otros"]
     if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
     if not categorias_gasto_personal: categorias_gasto_personal = ["Otros"]
 
