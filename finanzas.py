@@ -23,9 +23,9 @@ def conectar_google_sheets():
             "client_x509_cert_url": st.secrets["connections"]["gsheets"]["client_x509_cert_url"]
         }
         
-        # Con este chequeo limpiamos cualquier barra invertida residual si hiciera falta
+        # Doble limpieza profunda para asegurar que Google reciba los saltos de línea correctos
         if "private_key" in info_claves:
-            info_claves["private_key"] = info_claves["private_key"].replace("\\n", "\n")
+            info_claves["private_key"] = info_claves["private_key"].replace("\\n", "\n").replace("\n", "\n")
         
         # Estructuramos los permisos oficiales de lectura y escritura
         scopes = [
