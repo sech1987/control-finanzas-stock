@@ -88,7 +88,7 @@ with st.sidebar:
     st.markdown("---")
     seccion = st.radio(
         "Navegación:",
-        ["🏠 Dashboard General", "📝 Nueva Operación", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
+        ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
     )
     st.markdown("---")
     st.caption("FSM Pro - Versión Local Estable")
@@ -245,10 +245,69 @@ elif seccion == "📝 Nueva Operación":
             categoria = st.selectbox("Categoría", categorias_gasto_personal)
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto Personal", type="primary"):
-                nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"}])
+                nueva_fila = pd.DataFrame([{"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": "Categoría", "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo"}])
                 df_historial = pd.concat([df_historial, nueva_fila], ignore_index=True)
                 guardar_datos_local(df_historial, FILE_HISTORIAL)
                 st.rerun()
+
+# --- 🧮 CALCULADORA DE COSTOS (NUEVA PESTAÑA) ---
+elif seccion == "🧮 Calculadora de Costos":
+    st.title("🧮 Calculadora de Costos y Precio de Venta")
+    st.markdown("Usa esta herramienta para calcular presupuestos precisos rápido y saber cuánto cobrar.")
+    
+    col_calc1, col_calc2 = st.columns([4, 3])
+    
+    with col_calc1:
+        with st.container(border=True):
+            st.subheader("📋 Datos del Producto")
+            nombre_prod = st.text_input("Nombre del producto / trabajo:", placeholder="Ej: Remera Estampada DTF / Mate Grabado Láser")
+            
+            st.markdown("---")
+            st.markdown("**💰 1. Costo de Materiales directos**")
+            costo_materiales = st.number_input("Suma total de materiales usados ($):", min_value=0.0, value=0.0, step=100.0, help="Precio de compra de la remera base, vinilo, madera, insumos, etc.")
+            
+            st.markdown("---")
+            st.markdown("**⏱️ 2. Mano de Obra y Tiempo (Diseño/Armado)**")
+            c1, c2 = st.columns(2)
+            with c1:
+                tiempo_horas = st.number_input("Tiempo estimado de trabajo (Horas):", min_value=0.0, value=0.5, step=0.25, help="Tiempo en Corel, preparación de máquinas y armado final.")
+            with c2:
+                precio_hora_trabajo = st.number_input("Valor de tu hora de trabajo ($):", min_value=0.0, value=4000.0, step=500.0, help="Cuánto querés que valga tu hora de mano de obra neta.")
+            
+            costo_mano_obra = tiempo_horas * precio_hora_trabajo
+            st.caption(f"💵 Costo total de mano de obra: **$ {costo_mano_obra:,.2f}**")
+            
+            st.markdown("---")
+            st.markdown("**🔧 3. Costos Fijos y Desgaste (Taller)**")
+            costo_fijos_prod = st.number_input("Costo de estructura fijo por producto ($):", min_value=0.0, value=500.0, step=100.0, help="Monto estimado para cubrir luz, amortización del plotter/láser, alquiler, etc.")
+            
+            st.markdown("---")
+            st.markdown("**📈 4. Margen de Ganancia Comercial**")
+            porcentaje_ganancia = st.slider("Porcentaje de ganancia deseado encima del costo (%):", min_value=0, max_value=300, value=50, step=5)
+
+    # Cálculos finales matemáticos
+    costo_total_fabricacion = costo_materiales + costo_mano_obra + costo_fijos_prod
+    monto_ganancia_comercial = costo_total_fabricacion * (porcentaje_ganancia / 100.0)
+    precio_venta_sugerido = costo_total_fabricacion + monto_ganancia_comercial
+
+    with col_calc2:
+        with st.container(border=True):
+            st.markdown("<p style='text-align: center; color: #94A3B8; font-weight: bold; font-size: 14px;'>PRECIO SUGERIDO AL CLIENTE</p>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            st.markdown("### 📊 Desglose Técnico:")
+            st.write(f"📦 **Materiales directos:** $ {costo_materiales:,.2f}")
+            st.write(f"👤 **Tu tiempo de mano de obra:** $ {costo_mano_obra:,.2f}")
+            st.write(f"⚡ **Costos estructurales taller:** $ {costo_fijos_prod:,.2f}")
+            st.markdown(f"📉 **Costo Base Real:** $ {costo_total_fabricacion:,.2f}")
+            st.markdown(f"🔥 **Tu Ganancia Neta Líquida ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
+            
+            st.markdown("---")
+            st.subheader("📲 Texto rápido para presupuestar:")
+            desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
+            texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción.\n\n¡Cualquier consulta quedo a tu disposición! 🙌"
+            st.text_area("Copiá esto para pegar en WhatsApp:", value=texto_presupuesto, height=140)
 
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
