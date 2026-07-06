@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import hashlib
 from datetime import datetime, timezone
 from supabase import create_client, Client
 
@@ -17,6 +18,11 @@ def init_supabase():
         st.stop()
 
 supabase: Client = init_supabase()
+
+# --- FUNCIÓN AUXILIAR DE ENCRIPTAÇÃO (HASHING) ---
+def encriptar_contrasena(password: str) -> str:
+    """Transforma la contraseña en texto plano en un código hash seguro SHA-256."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # --- SISTEMA DE LOGIN Y REGISTRO MULTI-CLIENTE ---
 if "autenticado" not in st.session_state:
@@ -42,33 +48,32 @@ if not st.session_state.autenticado:
                 
                 if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
                     if email_input and pass_input:
-                        # Atajo de seguridad eterno para Sebastián
+                        # Atajo de seguridad eterno para Sebastián (Master Admin)
                         if email_input == "admin@olivia.com" and pass_input == "taller2026":
                             st.session_state.autenticado = True
                             st.session_state.usuario_id = 1
                             st.session_state.nombre_taller = "Olivia Imagen"
                             st.rerun()
                         
-                        # Buscar usuario en la base de datos de Supabase
-                        res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_input).execute()
+                        # Encriptamos la contraseña ingresada para compararla con Supabase
+                        pass_encriptada = encriptar_contrasena(pass_input)
+                        
+                        # Buscar usuario comparando el hash de la contraseña
+                        res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_encriptada).execute()
                         if res_user.data:
                             user_data = res_user.data[0]
                             
-                            # --- CONTROL DE FECHA DE VENCIMIENTO (14 DÍAS DE PRUEBA) ---
-                            # Leemos cuándo se creó la cuenta en Supabase
+                            # CONTROL DE FECHA DE VENCIMIENTO (14 DÍAS DE PRUEBA)
                             fecha_creacion_str = user_data["created_at"]
-                            # Convertimos el texto de la fecha a un objeto ejecutable en Python
                             fecha_creacion = datetime.fromisoformat(fecha_creacion_str.replace("Z", "+00:00"))
                             fecha_actual = datetime.now(timezone.utc)
                             
-                            # Calculamos los días transcurridos
                             dias_transcurridos = (fecha_actual - fecha_creacion).days
                             
                             if dias_transcurridos > 14:
                                 st.error("❌ Tu período de prueba de 14 días ha vencido.")
                                 st.info("ℹ️ Para activar tu licencia comercial y seguir gestionando tus finanzas, comunícate con el administrador.")
                             else:
-                                # Si está dentro del plazo, lo dejamos pasar normal
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.nombre_taller = user_data["nombre_taller"]
@@ -92,13 +97,16 @@ if not st.session_state.autenticado:
                             if check_user.data:
                                 st.error("❌ Este correo ya se encuentra registrado. Probá con otro o iniciá sesión.")
                             else:
+                                # Encriptamos la contraseña antes de guardarla en la base de datos
+                                hash_seguro = encriptar_contrasena(reg_pass)
+                                
                                 nuevo_usuario = {
                                     "nombre_taller": reg_taller,
                                     "email": reg_email,
-                                    "contrasena": reg_pass
+                                    "contrasena": hash_seguro  # Guardamos el código blindado
                                 }
                                 supabase.table("usuarios").insert(nuevo_usuario).execute()
-                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado e iniciar tus 14 días de prueba gratis.")
+                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado con seguridad bancaria.")
                         except Exception as e:
                             st.error(f"Error al registrar: {e}")
                     else:
