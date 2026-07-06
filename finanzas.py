@@ -3,6 +3,7 @@ import pandas as pd
 import hashlib
 from datetime import datetime, timezone
 from supabase import create_client, Client
+import io
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
@@ -41,7 +42,6 @@ if not st.session_state.autenticado:
     with col_l2:
         tab_login, tab_registro = st.tabs(["🔒 Iniciar Sesión", "✨ Crear Cuenta (Prueba Gratis)"])
         
-        # PESTAÑA 1: INICIAR SESIÓN
         with tab_login:
             with st.container(border=True):
                 email_input = st.text_input("Correo Electrónico", key="login_email").strip().lower()
@@ -49,7 +49,6 @@ if not st.session_state.autenticado:
                 
                 if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
                     if email_input and pass_input:
-                        # Atajo de seguridad eterno para Sebastián (Master Admin)
                         if email_input == "admin@olivia.com" and pass_input == "taller2026":
                             st.session_state.autenticado = True
                             st.session_state.usuario_id = 1
@@ -58,7 +57,6 @@ if not st.session_state.autenticado:
                             st.rerun()
                         
                         pass_encriptada = encriptar_contrasena(pass_input)
-                        
                         res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_encriptada).execute()
                         if res_user.data:
                             user_data = res_user.data[0]
@@ -67,16 +65,13 @@ if not st.session_state.autenticado:
                             fecha_creacion_str = user_data["created_at"]
                             fecha_creacion = datetime.fromisoformat(fecha_creacion_str.replace("Z", "+00:00"))
                             fecha_actual = datetime.now(timezone.utc)
-                            
                             dias_transcurridos = (fecha_actual - fecha_creacion).days
                             
                             if dias_transcurridos > 14:
                                 st.error("❌ Tu período de prueba de 14 días ha vencido.")
-                                st.info("ℹ️ Para activar tu licencia comercial y seguir gestionando tus finanzas, comunícate con el administrador.")
+                                st.info("ℹ️ Para activar tu licencia comercial comunícate con el administrador.")
                             else:
                                 st.session_state.autenticado = True
-                                # IMPORTANTE: Vinculamos al usuario con el ID del dueño de la cuenta
-                                # Si es empleado, guardamos su propio ID pero usaremos una lógica para heredar los datos del taller
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.nombre_taller = user_data["nombre_taller"]
                                 st.session_state.user_rol = user_data.get("rol", "Admin")
@@ -86,7 +81,6 @@ if not st.session_state.autenticado:
                     else:
                         st.warning("Por favor, completa todos los campos.")
                         
-        # PESTAÑA 2: REGISTRO DE NUEVOS USUARIOS (DUEÑOS)
         with tab_registro:
             with st.container(border=True):
                 reg_taller = st.text_input("Nombre de tu Emprendimiento / Taller", key="reg_taller").strip()
@@ -98,50 +92,34 @@ if not st.session_state.autenticado:
                         try:
                             check_user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                             if check_user.data:
-                                st.error("❌ Este correo ya se encuentra registrado. Probá con otro o iniciá sesión.")
+                                st.error("❌ Este correo ya se encuentra registrado.")
                             else:
                                 hash_seguro = encriptar_contrasena(reg_pass)
-                                
-                                nuevo_usuario = {
-                                    "nombre_taller": reg_taller,
-                                    "email": reg_email,
-                                    "contrasena": hash_seguro,
-                                    "rol": "Admin"
-                                }
+                                nuevo_usuario = {"nombre_taller": reg_taller, "email": reg_email, "contrasena": hash_seguro, "rol": "Admin"}
                                 supabase.table("usuarios").insert(nuevo_usuario).execute()
-                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado.")
+                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión.")
                         except Exception as e:
                             st.error(f"Error al registrar: {e}")
                     else:
                         st.warning("Por favor, completa todos los campos para el registro.")
-                        
     st.stop()
 
 # --- COMIENZO DE LA SESIÓN FILTRADA ---
 u_id = st.session_state.usuario_id
 rol_actual = st.session_state.user_rol
 
-# --- LÓGICA DE HERENCIA MULTI-USUARIO INTELIGENTE ---
-# Si el usuario que ingresa es Empleado, necesitamos saber quién es su Dueño (Admin) para cargar las tablas correctas de ese taller.
-# Para lograr esto, si la cuenta es de tipo Empleado, buscamos de qué taller depende usando la columna de herencia en la base de datos.
 try:
     user_actual_data = supabase.table("usuarios").select("*").eq("id", u_id).execute().data[0]
-    # Si la cuenta tiene un dueño asignado, usamos el ID del dueño para filtrar los datos, sino usamos su propio ID.
     owner_id = user_actual_data.get("owner_id")
-    if owner_id:
-        data_scope_id = owner_id
-    else:
-        data_scope_id = u_id
+    data_scope_id = owner_id if owner_id else u_id
 except Exception:
     data_scope_id = u_id
 
-# --- FUNCIONES DE CARGA FILTRADAS POR EL ENTORNÓ DEL TALLER ---
+# --- FUNCIONES DE CARGA ---
 def cargar_datos_cloud(tabla):
     try:
         res = supabase.table(tabla).select("*").eq("usuario_id", data_scope_id).execute()
-        if res.data:
-            return pd.DataFrame(res.data)
-        return pd.DataFrame()
+        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
 
@@ -157,6 +135,9 @@ else:
 
 if df_stock.empty:
     df_stock = pd.DataFrame(columns=["id", "item", "cantidad", "minimo", "usuario_id"])
+else:
+    df_stock["cantidad"] = pd.to_numeric(df_stock["cantidad"], errors='coerce').fillna(0)
+    df_stock["minimo"] = pd.to_numeric(df_stock["minimo"], errors='coerce').fillna(0)
 
 if df_metas.empty:
     df_metas = pd.DataFrame(columns=["id", "meta", "objetivo", "acumulado", "usuario_id"])
@@ -184,7 +165,7 @@ if not df_historial.empty:
     gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     billetera_personal = ingresos_p - gastos_p
 
-# --- NAVEGACIÓN CONFIGURADA POR ROLES ---
+# --- NAVEGACIÓN ---
 with st.sidebar:
     st.markdown(f"<h2 style='color: #4F46E5; margin-top: 0px;'>⚡ {st.session_state.nombre_taller}</h2>", unsafe_allow_html=True)
     st.caption(f"Rol Activo: **{rol_actual}**")
@@ -203,21 +184,34 @@ with st.sidebar:
         
     seccion = st.radio("Navegación:", opciones_menu)
     st.markdown("---")
-    st.caption("FSM Pro - Licencia Multiusuario Activa")
+    
+    # --- BOTÓN INTERNO DE ALERTA DE STOCK EN SIDEBAR ---
+    if not df_stock.empty:
+        criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
+        if not criticos.empty:
+            st.error(f"⚠️ ¡Falta reponer {len(criticos)} insumos!")
 
 # --- 🏠 DASHBOARD GENERAL ---
 if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("🏠 Panel de Control General")
     
+    # --- ALERTAS DE SALDOS DESFAVORABLES ---
+    if caja_negocio < 0:
+        st.error("⚠️ Alerta: La caja del emprendimiento se encuentra con saldo negativo / desfavorable.")
+    if billetera_personal < 0:
+        st.warning("⚠️ Alerta: Las finanzas personales registran saldo en rojo.")
+
     col1, col2 = st.columns(2)
     with col1:
         with st.container(border=True):
             st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold;'>FONDOS DISPONIBLES EMPRENDIMIENTO</p>", unsafe_allow_html=True)
-            st.markdown(f"<h2 style='color: #38BDF8; font-size: 42px; margin-top: 0px;'>$ {caja_negocio:,.2f}</h2>", unsafe_allow_html=True)
+            color_n = "#F87171" if caja_negocio < 0 else "#38BDF8"
+            st.markdown(f"<h2 style='color: {color_n}; font-size: 42px; margin-top: 0px;'>$ {caja_negocio:,.2f}</h2>", unsafe_allow_html=True)
     with col2:
         with st.container(border=True):
             st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold;'>FINANZAS PERSONALES (LIBRE)</p>", unsafe_allow_html=True)
-            st.markdown(f"<h2 style='color: #34D399; font-size: 42px; margin-top: 0px;'>$ {billetera_personal:,.2f}</h2>", unsafe_allow_html=True)
+            color_p = "#F87171" if billetera_personal < 0 else "#34D399"
+            st.markdown(f"<h2 style='color: {color_p}; font-size: 42px; margin-top: 0px;'>$ {billetera_personal:,.2f}</h2>", unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💡 Distribución Interna Recomendada")
@@ -235,6 +229,19 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
+        # --- 📥 BAJAR PLANILLA EXCEL NATIVA ---
+        st.subheader("📊 Exportar Historial Completo")
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_historial.to_excel(writer, index=False, sheet_name='Movimientos')
+        st.download_button(
+            label="📥 Descargar Planilla de Movimientos (Excel)",
+            data=buffer.getvalue(),
+            file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+
         df_historial["fecha"] = pd.to_datetime(df_historial["fecha"])
         df_historial["Mes"] = df_historial["fecha"].dt.strftime("%Y-%m")
         
@@ -273,7 +280,7 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                             supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                             st.rerun()
 
-# --- 📝 NUEVA OPERACIÓN ---
+# --- 📝 NUEVA OPERACIÓN (CON DESCUENTO CONECTADO DE STOCK) ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     
@@ -289,6 +296,20 @@ elif seccion == "📝 Nueva Operación":
             monto = st.number_input("Monto total ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", categorias_ingreso)
             
+            # --- INTERFAZ DE CONEXIÓN CON STOCK ---
+            descuenta_stock = False
+            insumo_seleccionado = None
+            cantidad_a_descontar = 0
+            
+            if not df_stock.empty and categoria == "Venta Producto":
+                descuenta_stock = st.checkbox("🔄 ¿Esta venta descuenta materiales del Stock?")
+                if descuenta_stock:
+                    col_st1, col_st2 = st.columns(2)
+                    with col_st1:
+                        insumo_seleccionado = st.selectbox("Seleccionar Insumo consumido:", df_stock["item"].tolist())
+                    with col_st2:
+                        cantidad_a_descontar = st.number_input("Cantidad de unidades utilizadas:", min_value=1, value=1, step=1)
+
             col_v1, col_v2 = st.columns(2)
             with col_v1:
                 est_pago = st.selectbox("Condición:", ["Total Pagado", "Seña", "Fiado", "Presupuesto"])
@@ -301,6 +322,9 @@ elif seccion == "📝 Nueva Operación":
 
             if st.button("Guardar e Imprimir Comprobante", type="primary"):
                 detalle_final = nota
+                if descuenta_stock and insumo_seleccionado:
+                    detalle_final = f"{detalle_final} [Descontado {cantidad_a_descontar} un. de {insumo_seleccionado}]"
+                
                 detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
                 
                 datos_insertar = {
@@ -315,6 +339,16 @@ elif seccion == "📝 Nueva Operación":
                     "usuario_id": data_scope_id
                 }
                 supabase.table("historial").insert(datos_insertar).execute()
+                
+                # EJECUTAR EL DESCUENTO DE STOCK EN TIEMPO REAL
+                if descuenta_stock and insumo_seleccionado:
+                    fila_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
+                    id_insumo = int(fila_insumo["id"])
+                    cant_actual = int(fila_insumo["cantidad"])
+                    nueva_cantidad = max(0, cant_actual - cantidad_a_descontar)
+                    
+                    # Impactamos directo la reducción en Supabase
+                    supabase.table("stock").update({"cantidad": nueva_cantidad}).eq("id", id_insumo).execute()
                 
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
                 nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
@@ -371,7 +405,6 @@ elif seccion == "📝 Nueva Operación":
 # --- 🧮 CALCULADORA DE COSTOS ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
-    
     col_calc1, col_calc2 = st.columns([4, 3])
     with col_calc1:
         with st.container(border=True):
@@ -426,12 +459,14 @@ elif seccion == "📦 Stock de Insumos":
     else:
         for idx, row in df_stock.iterrows():
             es_critico = int(row["cantidad"]) <= int(row["minimo"])
-            color_cartel = "🔴 Falta reponer" if es_critico else "🟢 Stock Ok"
+            color_cartel = "🔴 Falta reponer / Stock Crítico" if es_critico else "🟢 Stock Ok"
             
             with st.container(border=True):
                 c_name, c_status, c_cant, c_actions, c_del = st.columns([3, 2, 2, 3, 1])
                 with c_name: st.markdown(f"**{row['item']}**")
-                with c_status: c_status.caption(color_cartel)
+                with c_status: 
+                    if es_critico: st.error(color_cartel)
+                    else: st.success(color_cartel)
                 with c_cant: st.markdown(f"Unidades: `{row['cantidad']}` (Mín: {row['minimo']})")
                 with c_actions:
                     btn_menos, btn_mas = st.columns(2)
@@ -540,7 +575,7 @@ elif seccion == "📊 Mi Cierre de Caja":
                     col_b2.markdown(f"*{r['categoria']}* — {r['detalle']}")
                     col_b3.markdown(f"<h4 style='text-align:right; margin:0px;'>$ {float(r['monto']):,.2f}</h4>", unsafe_allow_html=True)
 
-# --- 👥 SECCIÓN NUEVA: GESTIÓN DE PERSONAL DESDE LA APP (SOLO ADMIN) ---
+# --- 👥 GESTIÓN DE PERSONAL ---
 elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
     st.title("👥 Panel de Control de Colaboradores")
     st.subheader("Añadir accesos para tus empleados de forma autónoma")
@@ -555,23 +590,20 @@ elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
         if st.button("Registrar Colaborador en el Taller", type="primary"):
             if nombre_emp and email_emp and pass_emp:
                 try:
-                    # Verificar si el mail del empleado ya existe globalmente
                     check_mail = supabase.table("usuarios").select("id").eq("email", email_emp).execute()
                     if check_mail.data:
-                        st.error("❌ Este correo ya está registrado por otro usuario del sistema.")
+                        st.error("❌ Este correo ya está registrado por otro usuario.")
                     else:
-                        # Encriptamos la clave del empleado
                         hash_seguro_emp = encriptar_contrasena(pass_emp)
-                        
                         nuevo_empleado = {
-                            "nombre_taller": st.session_state.nombre_taller, # Hereda el nombre de tu marca
+                            "nombre_taller": st.session_state.nombre_taller,
                             "email": email_emp,
                             "contrasena": hash_seguro_emp,
-                            "rol": "Empleado",          # Su rol nace limitado
-                            "owner_id": u_id            # Clave fundamental: queda atado al ID del dueño
+                            "rol": "Empleado",
+                            "owner_id": u_id
                         }
                         supabase.table("usuarios").insert(nuevo_empleado).execute()
-                        st.success(f"🎉 ¡Acceso creado con éxito para {nombre_emp}! Ya puede iniciar sesión con sus credenciales.")
+                        st.success(f"🎉 ¡Acceso creado con éxito para {nombre_emp}!")
                 except Exception as e:
                     st.error(f"Error al guardar colaborador: {e}")
             else:
@@ -580,7 +612,6 @@ elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📋 Colaboradores con acceso activo:")
     
-    # Traemos de Supabase la lista de empleados que pertenecen únicamente a este taller
     try:
         res_team = supabase.table("usuarios").select("*").eq("owner_id", u_id).eq("rol", "Empleado").execute()
         if res_team.data:
