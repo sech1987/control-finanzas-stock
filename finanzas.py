@@ -19,9 +19,8 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# --- FUNCIÓN AUXILIAR DE ENCRIPTAÇÃO (HASHING) ---
+# --- FUNCIÓN AUXILIAR DE ENCRIPTACIÓN ---
 def encriptar_contrasena(password: str) -> str:
-    """Transforma la contraseña en texto plano en un código hash seguro SHA-256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 # --- SISTEMA DE LOGIN Y REGISTRO MULTI-CLIENTE ---
@@ -31,6 +30,8 @@ if "usuario_id" not in st.session_state:
     st.session_state.usuario_id = None
 if "nombre_taller" not in st.session_state:
     st.session_state.nombre_taller = ""
+if "user_rol" not in st.session_state:
+    st.session_state.user_rol = "Admin"
 
 if not st.session_state.autenticado:
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -53,12 +54,11 @@ if not st.session_state.autenticado:
                             st.session_state.autenticado = True
                             st.session_state.usuario_id = 1
                             st.session_state.nombre_taller = "Olivia Imagen"
+                            st.session_state.user_rol = "Admin"
                             st.rerun()
                         
-                        # Encriptamos la contraseña ingresada para compararla con Supabase
                         pass_encriptada = encriptar_contrasena(pass_input)
                         
-                        # Buscar usuario comparando el hash de la contraseña
                         res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_encriptada).execute()
                         if res_user.data:
                             user_data = res_user.data[0]
@@ -77,6 +77,8 @@ if not st.session_state.autenticado:
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.nombre_taller = user_data["nombre_taller"]
+                                # Guardamos el rol que viene de Supabase ('Admin' o 'Empleado')
+                                st.session_state.user_rol = user_data.get("rol", "Admin")
                                 st.rerun()
                         else:
                             st.error("Correo o contraseña incorrectos.")
@@ -97,16 +99,16 @@ if not st.session_state.autenticado:
                             if check_user.data:
                                 st.error("❌ Este correo ya se encuentra registrado. Probá con otro o iniciá sesión.")
                             else:
-                                # Encriptamos la contraseña antes de guardarla en la base de datos
                                 hash_seguro = encriptar_contrasena(reg_pass)
                                 
                                 nuevo_usuario = {
                                     "nombre_taller": reg_taller,
                                     "email": reg_email,
-                                    "contrasena": hash_seguro  # Guardamos el código blindado
+                                    "contrasena": hash_seguro,
+                                    "rol": "Admin"  # Todo registro nuevo empieza como Admin de su taller
                                 }
                                 supabase.table("usuarios").insert(nuevo_usuario).execute()
-                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado con seguridad bancaria.")
+                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado.")
                         except Exception as e:
                             st.error(f"Error al registrar: {e}")
                     else:
@@ -116,6 +118,7 @@ if not st.session_state.autenticado:
 
 # --- COMIENZO DE LA SESIÓN FILTRADA ---
 u_id = st.session_state.usuario_id
+rol_actual = st.session_state.user_rol
 
 # --- FUNCIONES DE CARGA FILTRADAS POR USUARIO ---
 def cargar_datos_cloud(tabla):
@@ -152,10 +155,6 @@ else:
     categorias_ingreso = df_cat_local[df_cat_local["tipo_categoria"] == "Ingreso"]["nombre_categoria"].tolist()
     categorias_gasto_negocio = df_cat_local[df_cat_local["tipo_categoria"] == "Gasto Negocio"]["nombre_categoria"].tolist()
     categorias_gasto_personal = df_cat_local[df_cat_local["tipo_categoria"] == "Gasto Personal"]["nombre_categoria"].tolist()
-    
-    if not categorias_ingreso: categorias_ingreso = ["Otros"]
-    if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
-    if not categorias_gasto_personal: categorias_gasto_personal = ["Otros"]
 
 # --- CÁLCULO DE SALDOS ---
 caja_negocio = 0.0
@@ -170,24 +169,31 @@ if not df_historial.empty:
     gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     billetera_personal = ingresos_p - gastos_p
 
-# --- NAVEGACIÓN ---
+# --- NAVEGACIÓN CONFIGURADA POR ROLES ---
 with st.sidebar:
     st.markdown(f"<h2 style='color: #4F46E5; margin-top: 0px;'>⚡ {st.session_state.nombre_taller}</h2>", unsafe_allow_html=True)
+    st.caption(f"Rol Activo: **{rol_actual}**")
     if st.button("Cerrar Sesión 🔓", use_container_width=True):
         st.session_state.autenticado = False
         st.session_state.usuario_id = None
         st.session_state.nombre_taller = ""
+        st.session_state.user_rol = "Admin"
         st.rerun()
     st.markdown("---")
-    seccion = st.radio(
-        "Navegación:",
-        ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
-    )
+    
+    # El menú cambia dependiendo de quién inicia sesión
+    if rol_actual == "Admin":
+        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
+    else:
+        # Menú ultra acotado para el empleado del taller
+        opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos"]
+        
+    seccion = st.radio("Navegación:", opciones_menu)
     st.markdown("---")
     st.caption("FSM Pro - Licencia Multiusuario Activa")
 
 # --- 🏠 DASHBOARD GENERAL ---
-if seccion == "🏠 Dashboard General":
+if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("🏠 Panel de Control General")
     
     col1, col2 = st.columns(2)
@@ -254,10 +260,13 @@ if seccion == "🏠 Dashboard General":
                             supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                             st.rerun()
 
-# --- 📝 NUEVA OPERACIÓN ---
+# --- 📝 NUEVA OPERACIÓN (Acceso Compartido) ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
-    opcion = st.selectbox("¿Qué vas a registrar hoy?", ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"])
+    
+    # Si es empleado, limitamos las opciones para que no retire sueldos ni toque la caja personal
+    opciones_carga = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio"] if rol_actual == "Empleado" else ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"]
+    opcion = st.selectbox("¿Qué vas a registrar hoy?", opciones_carga)
     
     with st.container(border=True):
         if opcion == "Registrar Venta / Presupuesto":
@@ -294,30 +303,7 @@ elif seccion == "📝 Nueva Operación":
                     "usuario_id": u_id
                 }
                 supabase.table("historial").insert(datos_insertar).execute()
-                
-                fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-                nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
-                
-                if estado_guardar == "Total":
-                    st.session_state.ultimo_comprobante = f"🧾 *COMPROBANTE DE PAGO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💰 *Total Abonado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n¡Muchas gracias!"
-                    st.session_state.tipo_comprobante = "¡Recibo guardado!"
-                elif estado_guardar == "Seña":
-                    st.session_state.ultimo_comprobante = f"📝 *COMPROBANTE DE SEÑA*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Monto Señado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n📌 *Estado pedido:* En producción."
-                    st.session_state.tipo_comprobante = "¡Seña guardada!"
-                elif estado_guardar == "Presupuesto":
-                    st.session_state.ultimo_comprobante = f"📄 *PRESUPUESTO ESTIMADO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Inversión Estimada:* $ {monto:,.2f}\n\n⚠️ Validez: 7 días."
-                    st.session_state.tipo_comprobante = "¡Presupuesto guardado!"
-                else:
-                    st.session_state.ultimo_comprobante = f"🤝 *REGISTRO DE CUENTA CORRIENTE*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n📉 *Saldo Pendiente:* $ {monto:,.2f}"
-                    st.session_state.tipo_comprobante = "¡Fiado registrado!"
                 st.rerun()
-
-            if st.session_state.ultimo_comprobante:
-                st.success(st.session_state.tipo_comprobante)
-                st.text_area("Texto listo para WhatsApp:", value=st.session_state.ultimo_comprobante, height=150)
-                if st.button("Limpiar Pantalla"):
-                    st.session_state.ultimo_comprobante = None
-                    st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
@@ -329,7 +315,7 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
-        elif opcion == "Retirar Sueldo":
+        elif opcion == "Retirar Sueldo" and rol_actual == "Admin":
             monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=caja_negocio, step=50.0)
             if st.button("Confirmar Retiro", type="primary"):
                 f = datetime.now().strftime("%Y-%m-%d")
@@ -338,7 +324,7 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert([gasto_n, ingreso_p]).execute()
                 st.rerun()
 
-        elif opcion == "Registrar Gasto Personal":
+        elif opcion == "Registrar Gasto Personal" and rol_actual == "Admin":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", categorias_gasto_personal)
             nota = st.text_input("Detalle:")
@@ -348,9 +334,8 @@ elif seccion == "📝 Nueva Operación":
                 st.rerun()
 
 # --- 🧮 CALCULADORA DE COSTOS ---
-elif seccion == "🧮 Calculadora de Costos":
+elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
-    
     col_calc1, col_calc2 = st.columns([4, 3])
     with col_calc1:
         with st.container(border=True):
@@ -371,18 +356,8 @@ elif seccion == "🧮 Calculadora de Costos":
         with st.container(border=True):
             st.markdown("<p style='text-align: center; color: #94A3B8; font-weight: bold; font-size: 14px;'>PRECIO SUGERIDO AL CLIENTE</p>", unsafe_allow_html=True)
             st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
-            st.markdown("---")
-            st.write(f"📦 **Materiales:** $ {costo_materiales:,.2f}")
-            st.write(f"👤 **Mano de Obra:** $ {costo_mano_obra:,.2f}")
-            st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
-            st.markdown(f"📉 **Costo Base:** $ {costo_total_fabricacion:,.2f}")
-            
-            st.markdown("---")
-            desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
-            texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción."
-            st.text_area("Copiá esto para pegar en WhatsApp:", value=texto_presupuesto, height=140)
 
-# --- 📦 STOCK DE INSUMOS ---
+# --- 📦 STOCK DE INSUMOS (Acceso Compartido) ---
 elif seccion == "📦 Stock de Insumos":
     st.title("📦 Control de Inventario Personalizado")
     
@@ -429,7 +404,7 @@ elif seccion == "📦 Stock de Insumos":
                         st.rerun()
 
 # --- 📉 PUNTO DE EQUILIBRIO ---
-elif seccion == "📉 Punto de Equilibrio":
+elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
     st.title("📉 Análisis de Punto de Equilibrio")
     with st.container(border=True):
         costos_fijos = st.number_input("Costos fijos mensuales ($):", min_value=0.0, value=50000.0, step=1000.0)
@@ -445,78 +420,28 @@ elif seccion == "📉 Punto de Equilibrio":
         with res2: st.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
 
 # --- 🎯 METAS DE AHORRO ---
-elif seccion == "🎯 Metas de Ahorro":
+elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
     st.title("🎯 Alcancías Virtuales")
-    
     with st.expander("➕ Crear Nueva Meta de Ahorro"):
         col_m1, col_m2 = st.columns(2)
         with col_m1: nombre_m = st.text_input("¿Para qué estás ahorrando?:")
         with col_m2: monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
-        
         if st.button("Crear Meta", type="primary"):
             if nombre_m.strip():
                 meta = {"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0, "usuario_id": u_id}
                 supabase.table("metas").insert(meta).execute()
                 st.rerun()
 
-    st.markdown("---")
-    if df_metas.empty:
-        st.info("No tienes metas creadas todavía.")
-    else:
-        for idx, row in df_metas.iterrows():
-            porcentaje = min(float(row["acumulado"]) / float(row["objetivo"]), 1.0) if float(row["objetivo"]) > 0 else 0.0
-            with st.container(border=True):
-                st.markdown(f"### 🚀 {row['meta']}")
-                st.write(f"Progreso: **${float(row['acumulado']):,.2f}** de **${float(row['objetivo']):,.2f}**")
-                st.progress(porcentaje)
-                
-                col_b1, col_b2, col_b3 = st.columns([2, 2, 4])
-                with col_b1:
-                    monto_poner = st.number_input("Sumar dinero ($):", min_value=0.0, max_value=billetera_personal, step=100.0, key=f"in_{row['id']}")
-                    if st.button("📥 Sumar", key=f"btn_in_{row['id']}"):
-                        nuevo_acum = float(row["acumulado"]) + monto_poner
-                        supabase.table("metas").update({"acumulado": nuevo_acum}).eq("id", int(row["id"])).execute()
-                        
-                        gasto_p = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto_poner), "categoria": "Ahorro", "detalle": f"Destinado a meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": u_id}
-                        supabase.table("historial").insert(gasto_p).execute()
-                        st.rerun()
-                with col_b2:
-                    monto_sacar = st.number_input("Retirar dinero ($):", min_value=0.0, max_value=float(row["acumulado"]), step=100.0, key=f"out_{row['id']}")
-                    if st.button("📤 Retirar", key=f"btn_out_{row['id']}"):
-                        nuevo_acum = float(row["acumulado"]) - monto_sacar
-                        supabase.table("metas").update({"acumulado": nuevo_acum}).eq("id", int(row["id"])).execute()
-                        
-                        ingreso_p = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto_sacar), "categoria": "Ahorro", "detalle": f"Retiro de meta: {row['meta']}", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": u_id}
-                        supabase.table("historial").insert(ingreso_p).execute()
-                        st.rerun()
-                with col_b3:
-                    st.write("<br>", unsafe_allow_html=True)
-                    if st.button("🗑️ Eliminar Meta", key=f"del_meta_{row['id']}"):
-                        supabase.table("metas").delete().eq("id", int(row["id"])).execute()
-                        st.rerun()
-
 # --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
-elif seccion == "⚙️ Configurar Categorías":
+elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
     st.title("⚙️ Gestión Personalizada de Categorías")
-    
     with st.container(border=True):
         st.subheader("➕ Agregar Nueva Categoría")
         col_c1, col_c2 = st.columns(2)
         with col_c1: tipo_nueva = st.selectbox("¿A qué módulo pertenece?", ["Ingreso", "Gasto Negocio", "Gasto Personal"])
         with col_c2: nombre_nueva = st.text_input("Nombre de la categoría:")
-            
         if st.button("Guardar Nueva Categoría", type="primary"):
             if nombre_nueva.strip():
                 nueva_cat = {"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip(), "usuario_id": u_id}
                 supabase.table("categorias").insert(nueva_cat).execute()
-                st.rerun()
-                
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📋 Categorías Activas")
-    if not df_cat_local.empty:
-        for idx, r in df_cat_local.iterrows():
-            col_v_n, col_v_b = st.columns([5, 1])
-            col_v_n.markdown(f"▪️ **{r['tipo_categoria']}**: {r['nombre_categoria']}")
-            if col_v_b.button("🗑️", key=f"del_cat_{r['id']}"):
-                supabase.table("categorias").delete().eq("id", int(r['id'])).execute()
                 st.rerun()
