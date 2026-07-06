@@ -18,7 +18,7 @@ def init_supabase():
 
 supabase: Client = init_supabase()
 
-# --- SISTEMA DE LOGIN MULTI-CLIENTE ---
+# --- SISTEMA DE LOGIN Y REGISTRO MULTI-CLIENTE ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "usuario_id" not in st.session_state:
@@ -32,32 +32,65 @@ if not st.session_state.autenticado:
     
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
-        with st.container(border=True):
-            st.markdown("<h3 style='margin-top:0px;'>🔒 Iniciar Sesión</h3>", unsafe_allow_html=True)
-            email_input = st.text_input("Correo Electrónico").strip().lower()
-            pass_input = st.text_input("Contraseña", type="password") 
-            
-            if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
-                if email_input and pass_input:
-                    # ATAJO DE SEGURIDAD PARA SEBASTIÁN
-                    if email_input == "admin@olivia.com" and pass_input == "taller2026":
-                        st.session_state.autenticado = True
-                        st.session_state.usuario_id = 1
-                        st.session_state.nombre_taller = "Olivia Imagen"
-                        st.rerun()
-                    
-                    # Buscar otros usuarios en la base de datos de Supabase
-                    res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_input).execute()
-                    if res_user.data:
-                        user_data = res_user.data[0]
-                        st.session_state.autenticado = True
-                        st.session_state.usuario_id = user_data["id"]
-                        st.session_state.nombre_taller = user_data["nombre_taller"]
-                        st.rerun()
+        # Pestañas visuales para Ingresar o Registrarse
+        tab_login, tab_registro = st.tabs(["🔒 Iniciar Sesión", "✨ Crear Cuenta (Prueba Gratis)"])
+        
+        # PESTAÑA 1: INICIAR SESIÓN
+        with tab_login:
+            with st.container(border=True):
+                email_input = st.text_input("Correo Electrónico", key="login_email").strip().lower()
+                pass_input = st.text_input("Contraseña", type="password", key="login_pass") 
+                
+                if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
+                    if email_input and pass_input:
+                        # Atajo de seguridad para Sebastián
+                        if email_input == "admin@olivia.com" and pass_input == "taller2026":
+                            st.session_state.autenticado = True
+                            st.session_state.usuario_id = 1
+                            st.session_state.nombre_taller = "Olivia Imagen"
+                            st.rerun()
+                        
+                        # Buscar usuario en la base de datos de Supabase
+                        res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_input).execute()
+                        if res_user.data:
+                            user_data = res_user.data[0]
+                            st.session_state.autenticado = True
+                            st.session_state.usuario_id = user_data["id"]
+                            st.session_state.nombre_taller = user_data["nombre_taller"]
+                            st.rerun()
+                        else:
+                            st.error("Correo o contraseña incorrectos.")
                     else:
-                        st.error("Correo o contraseña incorrectos.")
-                else:
-                    st.warning("Por favor, completa todos los campos.")
+                        st.warning("Por favor, completa todos los campos.")
+                        
+        # PESTAÑA 2: REGISTRO DE NUEVOS USUARIOS
+        with tab_registro:
+            with st.container(border=True):
+                reg_taller = st.text_input("Nombre de tu Emprendimiento / Taller", key="reg_taller").strip()
+                reg_email = st.text_input("Correo Electrónico de Registro", key="reg_email").strip().lower()
+                reg_pass = st.text_input("Crea tu Contraseña", type="password", key="reg_pass")
+                
+                if st.button("Registrarme y Comenzar", use_container_width=True):
+                    if reg_taller and reg_email and reg_pass:
+                        try:
+                            # 1. Verificar si el mail ya existe en Supabase
+                            check_user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
+                            if check_user.data:
+                                st.error("❌ Este correo ya se encuentra registrado. Probá con otro o iniciá sesión.")
+                            else:
+                                # 2. Insertar el nuevo cliente de forma automática
+                                nuevo_usuario = {
+                                    "nombre_taller": reg_taller,
+                                    "email": reg_email,
+                                    "contrasena": reg_pass
+                                }
+                                supabase.table("usuarios").insert(nuevo_usuario).execute()
+                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado.")
+                        except Exception as e:
+                            st.error(f"Error al registrar: {e}")
+                    else:
+                        st.warning("Por favor, completa todos los campos para el registro.")
+                        
     st.stop()
 
 # --- COMIENZO DE LA SESIÓN FILTRADA ---
