@@ -77,7 +77,6 @@ if not st.session_state.autenticado:
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.nombre_taller = user_data["nombre_taller"]
-                                # Guardamos el rol que viene de Supabase ('Admin' o 'Empleado')
                                 st.session_state.user_rol = user_data.get("rol", "Admin")
                                 st.rerun()
                         else:
@@ -105,7 +104,7 @@ if not st.session_state.autenticado:
                                     "nombre_taller": reg_taller,
                                     "email": reg_email,
                                     "contrasena": hash_seguro,
-                                    "rol": "Admin"  # Todo registro nuevo empieza como Admin de su taller
+                                    "rol": "Admin"
                                 }
                                 supabase.table("usuarios").insert(nuevo_usuario).execute()
                                 st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado.")
@@ -181,11 +180,9 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
     
-    # El menú cambia dependiendo de quién inicia sesión
     if rol_actual == "Admin":
         opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
     else:
-        # Menú ultra acotado para el empleado del taller
         opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos"]
         
     seccion = st.radio("Navegación:", opciones_menu)
@@ -260,11 +257,10 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                             supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                             st.rerun()
 
-# --- 📝 NUEVA OPERACIÓN (Acceso Compartido) ---
+# --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     
-    # Si es empleado, limitamos las opciones para que no retire sueldos ni toque la caja personal
     opciones_carga = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio"] if rol_actual == "Empleado" else ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"]
     opcion = st.selectbox("¿Qué vas a registrar hoy?", opciones_carga)
     
@@ -303,7 +299,30 @@ elif seccion == "📝 Nueva Operación":
                     "usuario_id": u_id
                 }
                 supabase.table("historial").insert(datos_insertar).execute()
+                
+                fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+                nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
+                
+                if estado_guardar == "Total":
+                    st.session_state.ultimo_comprobante = f"🧾 *COMPROBANTE DE PAGO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💰 *Total Abonado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n¡Muchas gracias!"
+                    st.session_state.tipo_comprobante = "¡Recibo guardado!"
+                elif estado_guardar == "Seña":
+                    st.session_state.ultimo_comprobante = f"📝 *COMPROBANTE DE SEÑA*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Monto Señado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}\n\n📌 *Estado pedido:* En producción."
+                    st.session_state.tipo_comprobante = "¡Seña guardada!"
+                elif estado_guardar == "Presupuesto":
+                    st.session_state.ultimo_comprobante = f"📄 *PRESUPUESTO ESTIMADO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💵 *Inversión Estimada:* $ {monto:,.2f}\n\n⚠️ Validez: 7 días."
+                    st.session_state.tipo_comprobante = "¡Presupuesto guardado!"
+                else:
+                    st.session_state.ultimo_comprobante = f"🤝 *REGISTRO DE CUENTA CORRIENTE*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n📉 *Saldo Pendiente:* $ {monto:,.2f}"
+                    st.session_state.tipo_comprobante = "¡Fiado registrado!"
                 st.rerun()
+
+            if st.session_state.ultimo_comprobante:
+                st.success(st.session_state.tipo_comprobante)
+                st.text_area("Texto listo para WhatsApp:", value=st.session_state.ultimo_comprobante, height=150)
+                if st.button("Limpiar Pantalla"):
+                    st.session_state.ultimo_comprobante = None
+                    st.rerun()
 
         elif opcion == "Registrar Gasto Negocio":
             monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
@@ -333,9 +352,10 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
-# --- 🧮 CALCULADORA DE COSTOS ---
+# --- 🧮 CALCULADORA DE COSTOS (TOTALMENTE RESTAURADA) ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
+    
     col_calc1, col_calc2 = st.columns([4, 3])
     with col_calc1:
         with st.container(border=True):
@@ -348,6 +368,7 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             costo_fijos_prod = st.number_input("Costo de estructura fijo por producto ($):", min_value=0.0, value=500.0, step=100.0)
             porcentaje_ganancia = st.slider("Porcentaje de ganancia deseado (%):", min_value=0, max_value=300, value=50, step=5)
 
+    # Lógica de cálculos matemáticos
     costo_total_fabricacion = costo_materiales + costo_mano_obra + costo_fijos_prod
     monto_ganancia_comercial = costo_total_fabricacion * (porcentaje_ganancia / 100.0)
     precio_venta_sugerido = costo_total_fabricacion + monto_ganancia_comercial
@@ -356,8 +377,22 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
         with st.container(border=True):
             st.markdown("<p style='text-align: center; color: #94A3B8; font-weight: bold; font-size: 14px;'>PRECIO SUGERIDO AL CLIENTE</p>", unsafe_allow_html=True)
             st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            # --- CUADRO DE GANANCIAS RESTAURADO ---
+            st.write(f"📦 **Materiales:** $ {costo_materiales:,.2f}")
+            st.write(f"👤 **Mano de Obra:** $ {costo_mano_obra:,.2f}")
+            st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
+            st.markdown(f"📉 **Costo Base Total:** $ {costo_total_fabricacion:,.2f}")
+            st.markdown(f"💰 **Tu Ganancia Neta ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
+            
+            st.markdown("---")
+            # --- MENSAJE PARA WHATSAPP RESTAURADO ---
+            desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
+            texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción. Validez por 7 días."
+            st.text_area("Copiá esto para pegar en WhatsApp:", value=texto_presupuesto, height=140)
 
-# --- 📦 STOCK DE INSUMOS (Acceso Compartido) ---
+# --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
     st.title("📦 Control de Inventario Personalizado")
     
@@ -384,7 +419,7 @@ elif seccion == "📦 Stock de Insumos":
             with st.container(border=True):
                 c_name, c_status, c_cant, c_actions, c_del = st.columns([3, 2, 2, 3, 1])
                 with c_name: st.markdown(f"**{row['item']}**")
-                with c_status: st.caption(color_cartel)
+                with c_status: c_status.caption(color_cartel)
                 with c_cant: st.markdown(f"Unidades: `{row['cantidad']}` (Mín: {row['minimo']})")
                 with c_actions:
                     btn_menos, btn_mas = st.columns(2)
