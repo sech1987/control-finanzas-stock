@@ -181,9 +181,10 @@ with st.sidebar:
     st.markdown("---")
     
     if rol_actual == "Admin":
-        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías"]
+        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja"]
     else:
-        opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos"]
+        # Menú extendido inteligente para Empleado
+        opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos", "📊 Mi Cierre de Caja"]
         
     seccion = st.radio("Navegación:", opciones_menu)
     st.markdown("---")
@@ -352,7 +353,7 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
-# --- 🧮 CALCULADORA DE COSTOS (TOTALMENTE RESTAURADA) ---
+# --- 🧮 CALCULADORA DE COSTOS ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
     
@@ -368,7 +369,6 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             costo_fijos_prod = st.number_input("Costo de estructura fijo por producto ($):", min_value=0.0, value=500.0, step=100.0)
             porcentaje_ganancia = st.slider("Porcentaje de ganancia deseado (%):", min_value=0, max_value=300, value=50, step=5)
 
-    # Lógica de cálculos matemáticos
     costo_total_fabricacion = costo_materiales + costo_mano_obra + costo_fijos_prod
     monto_ganancia_comercial = costo_total_fabricacion * (porcentaje_ganancia / 100.0)
     precio_venta_sugerido = costo_total_fabricacion + monto_ganancia_comercial
@@ -378,8 +378,6 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             st.markdown("<p style='text-align: center; color: #94A3B8; font-weight: bold; font-size: 14px;'>PRECIO SUGERIDO AL CLIENTE</p>", unsafe_allow_html=True)
             st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
             st.markdown("---")
-            
-            # --- CUADRO DE GANANCIAS RESTAURADO ---
             st.write(f"📦 **Materiales:** $ {costo_materiales:,.2f}")
             st.write(f"👤 **Mano de Obra:** $ {costo_mano_obra:,.2f}")
             st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
@@ -387,7 +385,6 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             st.markdown(f"💰 **Tu Ganancia Neta ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
             
             st.markdown("---")
-            # --- MENSAJE PARA WHATSAPP RESTAURADO ---
             desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
             texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción. Validez por 7 días."
             st.text_area("Copiá esto para pegar en WhatsApp:", value=texto_presupuesto, height=140)
@@ -480,3 +477,56 @@ elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
                 nueva_cat = {"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip(), "usuario_id": u_id}
                 supabase.table("categorias").insert(nueva_cat).execute()
                 st.rerun()
+
+# --- 📊 SECCIÓN NUEVA: MI CIERRE DE CAJA (COMPARTIDO INTELEGENTEMENTE) ---
+elif seccion == "📊 Mi Cierre de Caja":
+    st.title("📊 Resumen del Día (Cierre de Caja)")
+    
+    fecha_hoy_db = datetime.now().strftime("%Y-%m-%d")
+    fecha_hoy_legible = datetime.now().strftime("%d/%m/%Y")
+    st.markdown(f"### 📆 Movimientos del día de hoy: **{fecha_hoy_legible}**")
+    
+    if df_historial.empty:
+        st.info("No se registran movimientos cargados hoy.")
+    else:
+        # Convertimos la columna fecha a formato limpio de texto para comparar con hoy
+        df_historial["fecha_txt"] = pd.to_datetime(df_historial["fecha"]).dt.strftime("%Y-%m-%d")
+        df_hoy = df_historial[df_historial["fecha_txt"] == fecha_hoy_db]
+        
+        if df_hoy.empty:
+            st.info("Todavía no se cargaron operaciones en el transcurso del día de hoy.")
+        else:
+            # Calculamos subtotales de ingresos del día según el medio de pago
+            hoy_efectivo = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Efectivo")]["monto"].sum()
+            hoy_mp = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Mercado Pago")]["monto"].sum()
+            hoy_transf = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Transferencia")]["monto"].sum()
+            hoy_tarjeta = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Tarjeta")]["monto"].sum()
+            
+            # Gastos del taller cargados hoy
+            hoy_gastos = df_hoy[df_hoy["tipo"] == "Gasto"]["monto"].sum()
+            
+            total_recaudado_hoy = hoy_efectivo + hoy_mp + hoy_transf + hoy_tarjeta
+            
+            # Renderizado de Tarjetas de Cierre en pantalla
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                with st.container(border=True): st.markdown(f"<p style='color: #FBBF24; font-size:13px; font-weight:bold; margin-bottom:2px;'>💵 EFECTIVO EN CAJA</p><h3>$ {hoy_efectivo:,.2f}</h3>", unsafe_allow_html=True)
+            with c2:
+                with st.container(border=True): st.markdown(f"<p style='color: #38BDF8; font-size:13px; font-weight:bold; margin-bottom:2px;'>💙 MERCADO PAGO</p><h3>$ {hoy_mp:,.2f}</h3>", unsafe_allow_html=True)
+            with c3:
+                with st.container(border=True): st.markdown(f"<p style='color: #A78BFA; font-size:13px; font-weight:bold; margin-bottom:2px;'>🏛️ TRANSFERENCIAS</p><h3>$ {hoy_transf:,.2f}</h3>", unsafe_allow_html=True)
+            with c4:
+                with st.container(border=True): st.markdown(f"<p style='color: #34D399; font-size:13px; font-weight:bold; margin-bottom:2px;'>💰 TOTAL RECAUDADO</p><h3>$ {total_recaudado_hoy:,.2f}</h3>", unsafe_allow_html=True)
+                
+            st.markdown(f"<p style='color: #F87171; font-size:14px; margin-top:5px; font-weight:bold;'>⚠️ Gastos del taller registrados hoy:</p> $ {hoy_gastos:,.2f}", unsafe_allow_html=True)
+            st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
+            
+            # Lista simple de control para que el empleado puntee sus ventas del turno
+            st.subheader("📋 Detalle de operaciones del turno:")
+            for idx, r in df_hoy[::-1].iterrows():
+                tipo_icono = "📥 Ingreso" if r["tipo"] == "Ingreso" else "📤 Gasto"
+                with st.container(border=True):
+                    col_b1, col_b2, col_b3 = st.columns([2, 5, 2])
+                    col_b1.markdown(f"**{tipo_icono}** | `{r['metodo_pago']}`")
+                    col_b2.markdown(f"*{r['categoria']}* — {r['detalle']}")
+                    col_b3.markdown(f"<h4 style='text-align:right; margin:0px;'>$ {float(r['monto']):,.2f}</h4>", unsafe_allow_html=True)
