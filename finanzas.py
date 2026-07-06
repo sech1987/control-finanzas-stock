@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone
 from supabase import create_client, Client
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
@@ -32,7 +32,6 @@ if not st.session_state.autenticado:
     
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
-        # Pestañas visuales para Ingresar o Registrarse
         tab_login, tab_registro = st.tabs(["🔒 Iniciar Sesión", "✨ Crear Cuenta (Prueba Gratis)"])
         
         # PESTAÑA 1: INICIAR SESIÓN
@@ -43,7 +42,7 @@ if not st.session_state.autenticado:
                 
                 if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
                     if email_input and pass_input:
-                        # Atajo de seguridad para Sebastián
+                        # Atajo de seguridad eterno para Sebastián
                         if email_input == "admin@olivia.com" and pass_input == "taller2026":
                             st.session_state.autenticado = True
                             st.session_state.usuario_id = 1
@@ -54,10 +53,26 @@ if not st.session_state.autenticado:
                         res_user = supabase.table("usuarios").select("*").eq("email", email_input).eq("contrasena", pass_input).execute()
                         if res_user.data:
                             user_data = res_user.data[0]
-                            st.session_state.autenticado = True
-                            st.session_state.usuario_id = user_data["id"]
-                            st.session_state.nombre_taller = user_data["nombre_taller"]
-                            st.rerun()
+                            
+                            # --- CONTROL DE FECHA DE VENCIMIENTO (14 DÍAS DE PRUEBA) ---
+                            # Leemos cuándo se creó la cuenta en Supabase
+                            fecha_creacion_str = user_data["created_at"]
+                            # Convertimos el texto de la fecha a un objeto ejecutable en Python
+                            fecha_creacion = datetime.fromisoformat(fecha_creacion_str.replace("Z", "+00:00"))
+                            fecha_actual = datetime.now(timezone.utc)
+                            
+                            # Calculamos los días transcurridos
+                            dias_transcurridos = (fecha_actual - fecha_creacion).days
+                            
+                            if dias_transcurridos > 14:
+                                st.error("❌ Tu período de prueba de 14 días ha vencido.")
+                                st.info("ℹ️ Para activar tu licencia comercial y seguir gestionando tus finanzas, comunícate con el administrador.")
+                            else:
+                                # Si está dentro del plazo, lo dejamos pasar normal
+                                st.session_state.autenticado = True
+                                st.session_state.usuario_id = user_data["id"]
+                                st.session_state.nombre_taller = user_data["nombre_taller"]
+                                st.rerun()
                         else:
                             st.error("Correo o contraseña incorrectos.")
                     else:
@@ -73,19 +88,17 @@ if not st.session_state.autenticado:
                 if st.button("Registrarme y Comenzar", use_container_width=True):
                     if reg_taller and reg_email and reg_pass:
                         try:
-                            # 1. Verificar si el mail ya existe en Supabase
                             check_user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                             if check_user.data:
                                 st.error("❌ Este correo ya se encuentra registrado. Probá con otro o iniciá sesión.")
                             else:
-                                # 2. Insertar el nuevo cliente de forma automática
                                 nuevo_usuario = {
                                     "nombre_taller": reg_taller,
                                     "email": reg_email,
                                     "contrasena": reg_pass
                                 }
                                 supabase.table("usuarios").insert(nuevo_usuario).execute()
-                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado.")
+                                st.success("🎉 ¡Cuenta creada con éxito! Ya podés iniciar sesión en la pestaña de al lado e iniciar tus 14 días de prueba gratis.")
                         except Exception as e:
                             st.error(f"Error al registrar: {e}")
                     else:
@@ -106,13 +119,11 @@ def cargar_datos_cloud(tabla):
     except Exception:
         return pd.DataFrame()
 
-# Carga de datos aislada para este cliente
 df_historial = cargar_datos_cloud("historial")
 df_stock = cargar_datos_cloud("stock")
 df_metas = cargar_datos_cloud("metas")
 df_cat_local = cargar_datos_cloud("categories")
 
-# Formatear columnas básicas si no están vacías
 if not df_historial.empty:
     df_historial["monto"] = pd.to_numeric(df_historial["monto"], errors='coerce').fillna(0.0)
 else:
@@ -138,7 +149,7 @@ else:
     if not categorias_gasto_negocio: categorias_gasto_negocio = ["Otros"]
     if not categorias_gasto_personal: categorias_gasto_personal = ["Otros"]
 
-# --- CÁLCULO DE SALDOS AL VUELO ---
+# --- CÁLCULO DE SALDOS ---
 caja_negocio = 0.0
 billetera_personal = 0.0
 
