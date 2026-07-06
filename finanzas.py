@@ -75,6 +75,8 @@ if not st.session_state.autenticado:
                                 st.info("ℹ️ Para activar tu licencia comercial y seguir gestionando tus finanzas, comunícate con el administrador.")
                             else:
                                 st.session_state.autenticado = True
+                                # IMPORTANTE: Vinculamos al usuario con el ID del dueño de la cuenta
+                                # Si es empleado, guardamos su propio ID pero usaremos una lógica para heredar los datos del taller
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.nombre_taller = user_data["nombre_taller"]
                                 st.session_state.user_rol = user_data.get("rol", "Admin")
@@ -84,7 +86,7 @@ if not st.session_state.autenticado:
                     else:
                         st.warning("Por favor, completa todos los campos.")
                         
-        # PESTAÑA 2: REGISTRO DE NUEVOS USUARIOS
+        # PESTAÑA 2: REGISTRO DE NUEVOS USUARIOS (DUEÑOS)
         with tab_registro:
             with st.container(border=True):
                 reg_taller = st.text_input("Nombre de tu Emprendimiento / Taller", key="reg_taller").strip()
@@ -119,10 +121,24 @@ if not st.session_state.autenticado:
 u_id = st.session_state.usuario_id
 rol_actual = st.session_state.user_rol
 
-# --- FUNCIONES DE CARGA FILTRADAS POR USUARIO ---
+# --- LÓGICA DE HERENCIA MULTI-USUARIO INTELIGENTE ---
+# Si el usuario que ingresa es Empleado, necesitamos saber quién es su Dueño (Admin) para cargar las tablas correctas de ese taller.
+# Para lograr esto, si la cuenta es de tipo Empleado, buscamos de qué taller depende usando la columna de herencia en la base de datos.
+try:
+    user_actual_data = supabase.table("usuarios").select("*").eq("id", u_id).execute().data[0]
+    # Si la cuenta tiene un dueño asignado, usamos el ID del dueño para filtrar los datos, sino usamos su propio ID.
+    owner_id = user_actual_data.get("owner_id")
+    if owner_id:
+        data_scope_id = owner_id
+    else:
+        data_scope_id = u_id
+except Exception:
+    data_scope_id = u_id
+
+# --- FUNCIONES DE CARGA FILTRADAS POR EL ENTORNÓ DEL TALLER ---
 def cargar_datos_cloud(tabla):
     try:
-        res = supabase.table(tabla).select("*").eq("usuario_id", u_id).execute()
+        res = supabase.table(tabla).select("*").eq("usuario_id", data_scope_id).execute()
         if res.data:
             return pd.DataFrame(res.data)
         return pd.DataFrame()
@@ -181,9 +197,8 @@ with st.sidebar:
     st.markdown("---")
     
     if rol_actual == "Admin":
-        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja"]
+        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
     else:
-        # Menú extendido inteligente para Empleado
         opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos", "📊 Mi Cierre de Caja"]
         
     seccion = st.radio("Navegación:", opciones_menu)
@@ -297,7 +312,7 @@ elif seccion == "📝 Nueva Operación":
                     "detalle": detalle_final,
                     "estado_pago": estado_guardar,
                     "metodo_pago": met_pago,
-                    "usuario_id": u_id
+                    "usuario_id": data_scope_id
                 }
                 supabase.table("historial").insert(datos_insertar).execute()
                 
@@ -331,7 +346,7 @@ elif seccion == "📝 Nueva Operación":
             met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto", type="primary"):
-                datos_insertar = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago, "usuario_id": u_id}
+                datos_insertar = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago, "usuario_id": data_scope_id}
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
@@ -339,8 +354,8 @@ elif seccion == "📝 Nueva Operación":
             monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=caja_negocio, step=50.0)
             if st.button("Confirmar Retiro", type="primary"):
                 f = datetime.now().strftime("%Y-%m-%d")
-                gasto_n = {"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": u_id}
-                ingreso_p = {"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto), "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": u_id}
+                gasto_n = {"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
+                ingreso_p = {"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto), "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
                 supabase.table("historial").insert([gasto_n, ingreso_p]).execute()
                 st.rerun()
 
@@ -349,7 +364,7 @@ elif seccion == "📝 Nueva Operación":
             categoria = st.selectbox("Categoría", categorias_gasto_personal)
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto Personal", type="primary"):
-                datos_insertar = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": "Gasto Personal", "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": u_id}
+                datos_insertar = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": "Gasto Personal", "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
@@ -401,7 +416,7 @@ elif seccion == "📦 Stock de Insumos":
         
         if st.button("Registrar Insumo", type="primary"):
             if nombre_i.strip():
-                insumo = {"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i), "usuario_id": u_id}
+                insumo = {"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i), "usuario_id": data_scope_id}
                 supabase.table("stock").insert(insumo).execute()
                 st.rerun()
 
@@ -460,7 +475,7 @@ elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         with col_m2: monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
         if st.button("Crear Meta", type="primary"):
             if nombre_m.strip():
-                meta = {"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0, "usuario_id": u_id}
+                meta = {"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0, "usuario_id": data_scope_id}
                 supabase.table("metas").insert(meta).execute()
                 st.rerun()
 
@@ -474,11 +489,11 @@ elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
         with col_c2: nombre_nueva = st.text_input("Nombre de la categoría:")
         if st.button("Guardar Nueva Categoría", type="primary"):
             if nombre_nueva.strip():
-                nueva_cat = {"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip(), "usuario_id": u_id}
+                nueva_cat = {"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip(), "usuario_id": data_scope_id}
                 supabase.table("categorias").insert(nueva_cat).execute()
                 st.rerun()
 
-# --- 📊 SECCIÓN NUEVA: MI CIERRE DE CAJA (COMPARTIDO INTELEGENTEMENTE) ---
+# --- 📊 MI CIERRE DE CAJA ---
 elif seccion == "📊 Mi Cierre de Caja":
     st.title("📊 Resumen del Día (Cierre de Caja)")
     
@@ -489,25 +504,20 @@ elif seccion == "📊 Mi Cierre de Caja":
     if df_historial.empty:
         st.info("No se registran movimientos cargados hoy.")
     else:
-        # Convertimos la columna fecha a formato limpio de texto para comparar con hoy
         df_historial["fecha_txt"] = pd.to_datetime(df_historial["fecha"]).dt.strftime("%Y-%m-%d")
         df_hoy = df_historial[df_historial["fecha_txt"] == fecha_hoy_db]
         
         if df_hoy.empty:
             st.info("Todavía no se cargaron operaciones en el transcurso del día de hoy.")
         else:
-            # Calculamos subtotales de ingresos del día según el medio de pago
             hoy_efectivo = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Efectivo")]["monto"].sum()
             hoy_mp = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Mercado Pago")]["monto"].sum()
             hoy_transf = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Transferencia")]["monto"].sum()
             hoy_tarjeta = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Tarjeta")]["monto"].sum()
             
-            # Gastos del taller cargados hoy
             hoy_gastos = df_hoy[df_hoy["tipo"] == "Gasto"]["monto"].sum()
-            
             total_recaudado_hoy = hoy_efectivo + hoy_mp + hoy_transf + hoy_tarjeta
             
-            # Renderizado de Tarjetas de Cierre en pantalla
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 with st.container(border=True): st.markdown(f"<p style='color: #FBBF24; font-size:13px; font-weight:bold; margin-bottom:2px;'>💵 EFECTIVO EN CAJA</p><h3>$ {hoy_efectivo:,.2f}</h3>", unsafe_allow_html=True)
@@ -521,7 +531,6 @@ elif seccion == "📊 Mi Cierre de Caja":
             st.markdown(f"<p style='color: #F87171; font-size:14px; margin-top:5px; font-weight:bold;'>⚠️ Gastos del taller registrados hoy:</p> $ {hoy_gastos:,.2f}", unsafe_allow_html=True)
             st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
             
-            # Lista simple de control para que el empleado puntee sus ventas del turno
             st.subheader("📋 Detalle de operaciones del turno:")
             for idx, r in df_hoy[::-1].iterrows():
                 tipo_icono = "📥 Ingreso" if r["tipo"] == "Ingreso" else "📤 Gasto"
@@ -530,3 +539,62 @@ elif seccion == "📊 Mi Cierre de Caja":
                     col_b1.markdown(f"**{tipo_icono}** | `{r['metodo_pago']}`")
                     col_b2.markdown(f"*{r['categoria']}* — {r['detalle']}")
                     col_b3.markdown(f"<h4 style='text-align:right; margin:0px;'>$ {float(r['monto']):,.2f}</h4>", unsafe_allow_html=True)
+
+# --- 👥 SECCIÓN NUEVA: GESTIÓN DE PERSONAL DESDE LA APP (SOLO ADMIN) ---
+elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
+    st.title("👥 Panel de Control de Colaboradores")
+    st.subheader("Añadir accesos para tus empleados de forma autónoma")
+    
+    with st.container(border=True):
+        st.markdown("### ✨ Registrar Nuevo Colaborador")
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1: nombre_emp = st.text_input("Nombre del Empleado (Ej: Juan Perez):").strip()
+        with col_p2: email_emp = st.text_input("Correo de Trabajo (Ej: juan@taller.com):").strip().lower()
+        with col_p3: pass_emp = st.text_input("Creale una Contraseña:", type="password")
+        
+        if st.button("Registrar Colaborador en el Taller", type="primary"):
+            if nombre_emp and email_emp and pass_emp:
+                try:
+                    # Verificar si el mail del empleado ya existe globalmente
+                    check_mail = supabase.table("usuarios").select("id").eq("email", email_emp).execute()
+                    if check_mail.data:
+                        st.error("❌ Este correo ya está registrado por otro usuario del sistema.")
+                    else:
+                        # Encriptamos la clave del empleado
+                        hash_seguro_emp = encriptar_contrasena(pass_emp)
+                        
+                        nuevo_empleado = {
+                            "nombre_taller": st.session_state.nombre_taller, # Hereda el nombre de tu marca
+                            "email": email_emp,
+                            "contrasena": hash_seguro_emp,
+                            "rol": "Empleado",          # Su rol nace limitado
+                            "owner_id": u_id            # Clave fundamental: queda atado al ID del dueño
+                        }
+                        supabase.table("usuarios").insert(nuevo_empleado).execute()
+                        st.success(f"🎉 ¡Acceso creado con éxito para {nombre_emp}! Ya puede iniciar sesión con sus credenciales.")
+                except Exception as e:
+                    st.error(f"Error al guardar colaborador: {e}")
+            else:
+                st.warning("Por favor, completa todos los campos del formulario.")
+                
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("📋 Colaboradores con acceso activo:")
+    
+    # Traemos de Supabase la lista de empleados que pertenecen únicamente a este taller
+    try:
+        res_team = supabase.table("usuarios").select("*").eq("owner_id", u_id).eq("rol", "Empleado").execute()
+        if res_team.data:
+            for emp in res_team.data:
+                with st.container(border=True):
+                    col_t1, col_t2, col_t3 = st.columns([4, 4, 2])
+                    with col_t1: st.markdown(f"👤 **{emp['email'].split('@')[0].capitalize()}**")
+                    with col_t2: st.caption(f"Correo de acceso: {emp['email']}")
+                    with col_t3:
+                        if st.button("Revocar Acceso 🗑️", key=f"del_emp_{emp['id']}", use_container_width=True):
+                            supabase.table("usuarios").delete().eq("id", int(emp['id'])).execute()
+                            st.success("Acceso revocado.")
+                            st.rerun()
+        else:
+            st.info("Todavía no diste de alta a ningún empleado en tu equipo.")
+    except Exception:
+        st.info("No se pudo cargar la nómina de personal activo.")
