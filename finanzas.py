@@ -229,56 +229,45 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EXCEL NATIVA ---
+        # --- 📥 BAJAR PLANILLA EXCEL NATIVA (CORREGIDO SIN TIMEZONE) ---
         st.subheader("📊 Exportar Historial Completo")
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_historial.to_excel(writer, index=False, sheet_name='Movimientos')
-        st.download_button(
-            label="📥 Descargar Planilla de Movimientos (Excel)",
-            data=buffer.getvalue(),
-            file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        st.markdown("<br>", unsafe_allow_html=True)
+        try:
+            # Hacemos una copia para no alterar el dataframe que usa la app
+            df_excel = df_historial.copy()
+            
+            # 1. Limpiamos las columnas de fechas para que no tengan Zona Horaria (Evita el ValueError)
+            for col in df_excel.columns:
+                if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
+                    df_excel[col] = df_excel[col].dt.tz_localize(None)
+            
+            # 2. Convertimos la columna 'fecha' a texto limpio AAAA-MM-DD para que sea ultra legible
+            if "fecha" in df_excel.columns:
+                df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
+            
+            # 3. Sacamos las columnas técnicas que ensucian el reporte del contador
+            columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
+            df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns])
+            
+            # Reordenamos para que quede estético
+            columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
+            df_excel = df_excel[[c for c in columnas_ordenadas if c in df_excel.columns]]
+            
+            # Renombramos las cabeceras para que quede profesional
+            df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
 
-        df_historial["fecha"] = pd.to_datetime(df_historial["fecha"])
-        df_historial["Mes"] = df_historial["fecha"].dt.strftime("%Y-%m")
-        
-        mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df_historial["Mes"].unique(), reverse=True))
-        df_mes = df_historial[df_historial["Mes"] == mes_sel]
-        
-        tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos)"])
-        
-        with tab_ingresos:
-            df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
-            for idx, row in df_ingresos[::-1].iterrows():
-                with st.container(border=True):
-                    col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
-                    with col_h1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                    with col_h2: st.markdown(f"**$ {float(row['monto']):,.2f}**")
-                    with col_h3:
-                        st.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
-                        st.caption(f"Condición: **{row['estado_pago']}** | Medio: **{row['metodo_pago']}**")
-                    with col_h4:
-                        if st.button("🗑️", key=f"del_ing_{row['id']}"):
-                            supabase.table("historial").delete().eq("id", int(row["id"])).execute()
-                            st.rerun()
-
-        with tab_egresos:
-            df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
-            for idx, row in df_egresos[::-1].iterrows():
-                with st.container(border=True):
-                    col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
-                    with col_e1: st.caption(str(row["fecha"].strftime("%Y-%m-%d")))
-                    with col_e2: st.markdown(f"**$ {float(row['monto']):,.2f}**")
-                    with col_e3:
-                        lbl = "⚙️ GASTO TALLER" if row["cuenta"] == "Negocio" else "👤 PERSONAL"
-                        st.markdown(f"**{lbl}** | *{row['categoria']}*\n\n{row['detalle']}")
-                    with col_e4:
-                        if st.button("🗑️", key=f"del_egr_{row['id']}"):
-                            supabase.table("historial").delete().eq("id", int(row["id"])).execute()
-                            st.rerun()
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
+            
+            st.download_button(
+                label="📥 Descargar Planilla de Movimientos (Excel)",
+                data=buffer.getvalue(),
+                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+        except Exception as e:
+            st.error(f"⚠️ Nota: Añade más movimientos para habilitar la descarga limpia en Excel.")
 
 # --- 📝 NUEVA OPERACIÓN (CON DESCUENTO CONECTADO DE STOCK) ---
 elif seccion == "📝 Nueva Operación":
