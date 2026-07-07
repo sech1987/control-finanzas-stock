@@ -229,57 +229,43 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-      # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN DEFINITIVA CORREGIDA) ---
+        # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN DEFINITIVA CORREGIDA) ---
         st.subheader("📊 Exportar Historial Completo")
         try:
-            if not df_historial.empty:
-                # 1. Copia limpia para no alterar la app
-                df_excel = df_historial.copy()
-                
-                # 2. Forzamos la conversión de la fecha a datetime sin zona horaria
-                if "fecha" in df_excel.columns:
-                    df_excel["fecha"] = pd.to_datetime(df_excel["fecha"], errors='coerce')
-                    # Quitamos cualquier zona horaria si existiera
-                    if pd.api.types.is_datetime64_any_dtype(df_excel["fecha"]):
-                        df_excel["fecha"] = df_excel["fecha"].dt.tz_localize(None)
-                    # La pasamos a texto limpio AAAA-MM-DD
-                    df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
-                
-                # 3. Limpiamos cualquier otra columna de fecha por las dudas
-                for col in df_excel.columns:
-                    if col != "fecha" and pd.api.types.is_datetime64_any_dtype(df_excel[col]):
-                        df_excel[col] = df_excel[col].dt.tz_localize(None)
-                
-                # 4. Quitamos las columnas técnicas de IDs y filtros internos
-                columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
-                df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns], errors='ignore')
-                
-                # 5. Reordenamos las columnas existentes en minúsculas
-                columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
-                columnas_presentes = [c for c in columnas_ordenadas if c in df_excel.columns]
-                df_excel = df_excel[columnas_presentes]
-                
-                # 6. RECIÉN ACÁ renombramos estéticamente para el archivo final
-                df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
-
-                # 7. Armamos el Excel nativo
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                    df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
-                
-                st.download_button(
-                    label="📥 Descargar Planilla de Movimientos (Excel)",
-                    data=buffer.getvalue(),
-                    file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary"
-                )
-            else:
-                st.info("💡 Cuando registres tu primer movimiento del mes, vas a poder descargar la planilla de Excel desde acá.")
-        except Exception as e:
-            st.warning(f"⚠️ Nota: Se generó una descarga directa por compatibilidad.")
+            df_excel = df_historial.copy()
             
-            # Descarga de contingencia directa sin formatear para que nunca falle
+            if "fecha" in df_excel.columns:
+                df_excel["fecha"] = pd.to_datetime(df_excel["fecha"], errors='coerce')
+                if pd.api.types.is_datetime64_any_dtype(df_excel["fecha"]):
+                    df_excel["fecha"] = df_excel["fecha"].dt.tz_localize(None)
+                df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
+            
+            for col in df_excel.columns:
+                if col != "fecha" and pd.api.types.is_datetime64_any_dtype(df_excel[col]):
+                    df_excel[col] = df_excel[col].dt.tz_localize(None)
+            
+            columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
+            df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns], errors='ignore')
+            
+            columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
+            columnas_presentes = [c for c in columnas_ordenadas if c in df_excel.columns]
+            df_excel = df_excel[columnas_presentes]
+            
+            df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
+
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
+            
+            st.download_button(
+                label="📥 Descargar Planilla de Movimientos (Excel)",
+                data=buffer.getvalue(),
+                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+        except Exception as e:
+            st.warning("⚠️ Nota: Se generó una descarga directa por compatibilidad.")
             buffer_simple = io.BytesIO()
             with pd.ExcelWriter(buffer_simple, engine='openpyxl') as writer:
                 df_historial.to_excel(writer, index=False, sheet_name='Movimientos')
@@ -289,7 +275,52 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                 file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-# --- 📝 NUEVA OPERACIÓN (CON DESCUENTO CONECTADO DE STOCK) ---
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Procesamiento para agrupar los bloques visuales por mes
+        df_historial_visual = df_historial.copy()
+        df_historial_visual["fecha_dt"] = pd.to_datetime(df_historial_visual["fecha"], errors='coerce')
+        df_historial_visual["Mes"] = df_historial_visual["fecha_dt"].dt.strftime("%Y-%m").fillna("Sin Fecha")
+        
+        mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df_historial_visual["Mes"].unique(), reverse=True))
+        df_mes = df_historial_visual[df_historial_visual["Mes"] == mes_sel]
+        
+        tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos)"])
+        
+        with tab_ingresos:
+            df_ingresos = df_mes[df_mes["tipo"] == "Ingreso"]
+            for idx, row in df_ingresos[::-1].iterrows():
+                with st.container(border=True):
+                    col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
+                    fecha_str = row["fecha_dt"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_dt"]) else str(row["fecha"])
+                    with col_h1: st.caption(fecha_str)
+                    with col_h2: st.markdown(f"**$ {float(row['monto']):,.2f}**")
+                    with col_h3:
+                        st.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
+                        st.caption(f"Condición: **{row['estado_pago']}** | Medio: **{row['metodo_pago']}**")
+                    with col_h4:
+                        if st.button("🗑️", key=f"del_ing_{row['id']}"):
+                            supabase.table("historial").delete().eq("id", int(row["id"])).execute()
+                            st.rerun()
+
+        with tab_egresos:
+            df_egresos = df_mes[df_mes["tipo"] == "Gasto"]
+            for idx, row in df_egresos[::-1].iterrows():
+                with st.container(border=True):
+                    col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
+                    fecha_str = row["fecha_dt"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_dt"]) else str(row["fecha"])
+                    with col_e1: st.caption(fecha_str)
+                    with col_e2: st.markdown(f"**$ {float(row['monto']):,.2f}**")
+                    with col_e3:
+                        lbl = "⚙️ GASTO TALLER" if row["cuenta"] == "Negocio" else "👤 PERSONAL"
+                        st.markdown(f"**{lbl}** | *{row['categoria']}*\n\n{row['detalle']}")
+                    with col_e4:
+                        if st.button("🗑️", key=f"del_egr_{row['id']}"):
+                            supabase.table("historial").delete().eq("id", int(row["id"])).execute()
+                            st.rerun()
+
+# --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     
@@ -305,7 +336,6 @@ elif seccion == "📝 Nueva Operación":
             monto = st.number_input("Monto total ($)", min_value=0.0, step=50.0)
             categoria = st.selectbox("Categoría", categorias_ingreso)
             
-            # --- INTERFAZ DE CONEXIÓN CON STOCK ---
             descuenta_stock = False
             insumo_seleccionado = None
             cantidad_a_descontar = 0
@@ -349,14 +379,11 @@ elif seccion == "📝 Nueva Operación":
                 }
                 supabase.table("historial").insert(datos_insertar).execute()
                 
-                # EJECUTAR EL DESCUENTO DE STOCK EN TIEMPO REAL
                 if descuenta_stock and insumo_seleccionado:
                     fila_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
                     id_insumo = int(fila_insumo["id"])
                     cant_actual = int(fila_insumo["cantidad"])
                     nueva_cantidad = max(0, cant_actual - cantidad_a_descontar)
-                    
-                    # Impactamos directo la reducción en Supabase
                     supabase.table("stock").update({"cantidad": nueva_cantidad}).eq("id", id_insumo).execute()
                 
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
@@ -394,7 +421,7 @@ elif seccion == "📝 Nueva Operación":
                 st.rerun()
 
         elif opcion == "Retirar Sueldo" and rol_actual == "Admin":
-            monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=caja_negocio, step=50.0)
+            monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=max(0.0, caja_negocio), step=50.0)
             if st.button("Confirmar Retiro", type="primary"):
                 f = datetime.now().strftime("%Y-%m-%d")
                 gasto_n = {"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
@@ -440,7 +467,6 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
             st.markdown(f"📉 **Costo Base Total:** $ {costo_total_fabricacion:,.2f}")
             st.markdown(f"💰 **Tu Ganancia Neta ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
-            
             st.markdown("---")
             desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
             texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción. Validez por 7 días."
@@ -449,13 +475,11 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
     st.title("📦 Control de Inventario Personalizado")
-    
     with st.expander("➕ Agregar Nuevo Insumo al Stock"):
         col_i1, col_i2, col_i3 = st.columns(3)
         with col_i1: nombre_i = st.text_input("Nombre del material:")
         with col_i2: cant_i = st.number_input("Cantidad Inicial:", min_value=0, step=1)
         with col_i3: minimo_i = st.number_input("Stock Mínimo Alerta:", min_value=0, step=1)
-        
         if st.button("Registrar Insumo", type="primary"):
             if nombre_i.strip():
                 insumo = {"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i), "usuario_id": data_scope_id}
@@ -469,7 +493,6 @@ elif seccion == "📦 Stock de Insumos":
         for idx, row in df_stock.iterrows():
             es_critico = int(row["cantidad"]) <= int(row["minimo"])
             color_cartel = "🔴 Falta reponer / Stock Crítico" if es_critico else "🟢 Stock Ok"
-            
             with st.container(border=True):
                 c_name, c_status, c_cant, c_actions, c_del = st.columns([3, 2, 2, 3, 1])
                 with c_name: st.markdown(f"**{row['item']}**")
@@ -501,7 +524,6 @@ elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
         costos_fijos = st.number_input("Costos fijos mensuales ($):", min_value=0.0, value=50000.0, step=1000.0)
         precio_promedio = st.number_input("Precio de venta promedio ($):", min_value=1.0, value=2000.0)
         costo_promedio = st.number_input("Costo de insumos promedio ($):", min_value=0.0, value=800.0)
-    
     margen = precio_promedio - costo_promedio
     if margen > 0:
         unidades = costos_fijos / margen
@@ -540,7 +562,6 @@ elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
 # --- 📊 MI CIERRE DE CAJA ---
 elif seccion == "📊 Mi Cierre de Caja":
     st.title("📊 Resumen del Día (Cierre de Caja)")
-    
     fecha_hoy_db = datetime.now().strftime("%Y-%m-%d")
     fecha_hoy_legible = datetime.now().strftime("%d/%m/%Y")
     st.markdown(f"### 📆 Movimientos del día de hoy: **{fecha_hoy_legible}**")
@@ -548,8 +569,9 @@ elif seccion == "📊 Mi Cierre de Caja":
     if df_historial.empty:
         st.info("No se registran movimientos cargados hoy.")
     else:
-        df_historial["fecha_txt"] = pd.to_datetime(df_historial["fecha"]).dt.strftime("%Y-%m-%d")
-        df_hoy = df_historial[df_historial["fecha_txt"] == fecha_hoy_db]
+        df_historial_hoy = df_historial.copy()
+        df_historial_hoy["fecha_txt"] = pd.to_datetime(df_historial_hoy["fecha"], errors='coerce').dt.strftime("%Y-%m-%d")
+        df_hoy = df_historial_hoy[df_historial_hoy["fecha_txt"] == fecha_hoy_db]
         
         if df_hoy.empty:
             st.info("Todavía no se cargaron operaciones en el transcurso del día de hoy.")
