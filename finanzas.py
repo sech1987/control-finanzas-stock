@@ -285,6 +285,7 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
+        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL ---
         st.subheader("📊 Exportar Historial Completo")
         try:
             df_csv = df_historial.copy()
@@ -320,12 +321,32 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # Procesamos las fechas para la vista mensual estructurada
         df_historial_visual = df_historial.copy()
         df_historial_visual["fecha_dt"] = pd.to_datetime(df_historial_visual["fecha"], errors='coerce')
         df_historial_visual["Mes"] = df_historial_visual["fecha_dt"].dt.strftime("%Y-%m").fillna("Sin Fecha")
         
         mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df_historial_visual["Mes"].unique(), reverse=True))
         df_mes = df_historial_visual[df_historial_visual["Mes"] == mes_sel]
+        
+        # --- 📊 NUEVO MÓDULO: GRÁFICO COMPARATIVO MENSUAL ---
+        st.subheader("📈 Balance Financiero Mensual")
+        with st.container(border=True):
+            # Calculamos totales del mes actual seleccionado
+            total_ingresos_mes = df_mes[(df_mes["tipo"] == "Ingreso") & (df_mes["estado_pago"] != "Presupuesto")]["monto"].sum()
+            total_egresos_mes = df_mes[df_mes["tipo"] == "Gasto"]["monto"].sum()
+            
+            # Construimos un dataframe compacto exclusivo para alimentar el gráfico de barras de Streamlit
+            df_grafico = pd.DataFrame({
+                "Tipo": ["📥 Ventas / Ingresos", "📤 Gastos / Egresos"],
+                "Monto ($)": [total_ingresos_mes, total_egresos_mes]
+            }).set_index("Tipo")
+            
+            # Renderizamos el gráfico nativo
+            st.bar_chart(df_grafico, y="Monto ($)", color="#4F46E5", use_container_width=True)
+            st.caption(f"Resumen del período {mes_sel}: Registraste **$ {total_ingresos_mes:,.2f}** en ingresos contra **$ {total_egresos_mes:,.2f}** en egresos operativos.")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
         
         tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos)"])
         
@@ -479,11 +500,10 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
-# --- 🧮 CALCULADORA DE COSTOS (CON MODO CLIENTE INTEGRADO) ---
+# --- 🧮 CALCULADORA DE COSTOS ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
     
-    # Interruptor para activar la privacidad en el mostrador
     modo_cliente = st.toggle("👁️ Modo Vista Cliente (Ocultar Costos y Ganancias)", value=False)
     
     col_calc1, col_calc2 = st.columns([4, 3])
@@ -508,7 +528,6 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
             st.markdown("---")
             
-            # Si el modo cliente está encendido, ocultamos el desglose interno de los costos
             if modo_cliente:
                 st.info("🔒 **Modo Cliente Activo:** El desglose de costos fijos, insumos y porcentaje de ganancia neta se encuentra oculto para proteger tus márgenes comerciales en mostrador.")
             else:
