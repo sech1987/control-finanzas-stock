@@ -229,46 +229,61 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EXCEL NATIVA (CORREGIDO SIN TIMEZONE) ---
+       # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN ULTRA BLINDADA) ---
         st.subheader("📊 Exportar Historial Completo")
         try:
-            # Hacemos una copia para no alterar el dataframe que usa la app
+            # Hacemos una copia limpia para trabajar
             df_excel = df_historial.copy()
             
-            # 1. Limpiamos las columnas de fechas para que no tengan Zona Horaria (Evita el ValueError)
-            for col in df_excel.columns:
-                if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
-                    df_excel[col] = df_excel[col].dt.tz_localize(None)
-            
-            # 2. Convertimos la columna 'fecha' a texto limpio AAAA-MM-DD para que sea ultra legible
-            if "fecha" in df_excel.columns:
-                df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
-            
-            # 3. Sacamos las columnas técnicas que ensucian el reporte del contador
-            columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
-            df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns])
-            
-            # Reordenamos para que quede estético
-            columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
-            df_excel = df_excel[[c for c in columnas_ordenadas if c in df_excel.columns]]
-            
-            # Renombramos las cabeceras para que quede profesional
-            df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
+            # Aseguramos que las columnas clave existan para evitar KeyErrors
+            if not df_excel.empty:
+                # Si existe la columna 'fecha', la formateamos de forma segura
+                if "fecha" in df_excel.columns:
+                    df_excel["fecha"] = pd.to_datetime(df_excel["fecha"], errors='coerce')
+                    df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
+                
+                # Eliminamos de raíz cualquier zona horaria en todas las columnas
+                for col in df_excel.columns:
+                    if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
+                        df_excel[col] = df_excel[col].dt.tz_localize(None)
+                
+                # Filtramos y quitamos las columnas técnicas de IDs
+                columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
+                df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns])
+                
+                # Reordenamos estéticamente
+                columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
+                df_excel = df_excel[[c for c in columnas_ordenadas if c in df_excel.columns]]
+                
+                # Ponemos los nombres de las columnas lindos para el Excel
+                df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
 
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
-            
-            st.download_button(
-                label="📥 Descargar Planilla de Movimientos (Excel)",
-                data=buffer.getvalue(),
-                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
+                
+                st.download_button(
+                    label="📥 Descargar Planilla de Movimientos (Excel)",
+                    data=buffer.getvalue(),
+                    file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+            else:
+                st.info("💡 Cuando registres tu primer movimiento del mes, vas a poder descargar la planilla de Excel desde acá.")
         except Exception as e:
-            st.error(f"⚠️ Nota: Añade más movimientos para habilitar la descarga limpia en Excel.")
-
+            # Si algo falla de fondo, te muestra el botón igual con un formato genérico en lugar de colgarse
+            st.warning("⚠️ Nota del sistema: Registrá un par de movimientos más para activar el diseño personalizado del Excel.")
+            
+            # Botón de rescate (CSV o Excel directo sin formatear) para que nunca se queden a pata
+            buffer_simple = io.BytesIO()
+            df_historial.to_excel(buffer_simple, index=False)
+            st.download_button(
+                label="📥 Descargar Planilla de Emergencia",
+                data=buffer_simple.getvalue(),
+                file_name="Planilla_Movimientos_Taller.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 # --- 📝 NUEVA OPERACIÓN (CON DESCUENTO CONECTADO DE STOCK) ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
