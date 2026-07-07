@@ -229,51 +229,45 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN DEFINITIVA CORREGIDA) ---
+        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL (ULTRA BLINDADO SIN LIBRERÍAS ROTTAS) ---
         st.subheader("📊 Exportar Historial Completo")
         try:
-            df_excel = df_historial.copy()
+            df_csv = df_historial.copy()
             
-            if "fecha" in df_excel.columns:
-                df_excel["fecha"] = pd.to_datetime(df_excel["fecha"], errors='coerce')
-                if pd.api.types.is_datetime64_any_dtype(df_excel["fecha"]):
-                    df_excel["fecha"] = df_excel["fecha"].dt.tz_localize(None)
-                df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
+            # Formateamos la fecha a texto limpio AAAA-MM-DD
+            if "fecha" in df_csv.columns:
+                df_csv["fecha"] = pd.to_datetime(df_csv["fecha"], errors='coerce').dt.strftime("%Y-%m-%d")
             
-            for col in df_excel.columns:
-                if col != "fecha" and pd.api.types.is_datetime64_any_dtype(df_excel[col]):
-                    df_excel[col] = df_excel[col].dt.tz_localize(None)
-            
+            # Borramos las columnas técnicas
             columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
-            df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns], errors='ignore')
+            df_csv = df_csv.drop(columns=[c for c in columnas_a_sacar if c in df_csv.columns], errors='ignore')
             
+            # Reordenamos de forma prolija
             columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
-            columnas_presentes = [c for c in columnas_ordenadas if c in df_excel.columns]
-            df_excel = df_excel[columnas_presentes]
+            columnas_presentes = [c for c in columnas_ordenadas if c in df_csv.columns]
+            df_csv = df_csv[columnas_presentes]
             
-            df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
+            # Ponemos lindos los títulos de las columnas
+            df_csv.columns = [c.replace("_", " ").capitalize() for c in df_csv.columns]
 
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
+            # Convertimos a CSV separado por punto y coma, ideal para Excel en Latinoamérica
+            csv_data = df_csv.to_csv(index=False, sep=';', encoding='utf-8-sig')
             
             st.download_button(
-                label="📥 Descargar Planilla de Movimientos (Excel)",
-                data=buffer.getvalue(),
-                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                label="📥 Descargar Planilla de Movimientos (Excel/CSV)",
+                data=csv_data,
+                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.csv",
+                mime="text/csv",
                 type="primary"
             )
         except Exception as e:
-            st.warning("⚠️ Nota: Se generó una descarga directa por compatibilidad.")
-            buffer_simple = io.BytesIO()
-            with pd.ExcelWriter(buffer_simple, engine='openpyxl') as writer:
-                df_historial.to_excel(writer, index=False, sheet_name='Movimientos')
+            st.warning("⚠️ Nota: Generando descarga directa por compatibilidad.")
+            csv_simple = df_historial.to_csv(index=False, sep=';', encoding='utf-8-sig')
             st.download_button(
-                label="📥 Descargar Planilla Directa",
-                data=buffer_simple.getvalue(),
-                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label="📥 Descargar Planilla Directa (CSV)",
+                data=csv_simple,
+                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.csv",
+                mime="text/csv"
             )
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -340,7 +334,7 @@ elif seccion == "📝 Nueva Operación":
             insumo_seleccionado = None
             cantidad_a_descontar = 0
             
-            if not df_stock.empty and categoria == "Venta Producto":
+            if not df_stock.empty and category == "Venta Producto" or categoria == "Venta Producto":
                 descuenta_stock = st.checkbox("🔄 ¿Esta venta descuenta materiales del Stock?")
                 if descuenta_stock:
                     col_st1, col_st2 = st.columns(2)
