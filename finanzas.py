@@ -229,35 +229,40 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-       # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN ULTRA BLINDADA) ---
+      # --- 📥 BAJAR PLANILLA EXCEL NATIVA (VERSIÓN DEFINITIVA CORREGIDA) ---
         st.subheader("📊 Exportar Historial Completo")
         try:
-            # Hacemos una copia limpia para trabajar
-            df_excel = df_historial.copy()
-            
-            # Aseguramos que las columnas clave existan para evitar KeyErrors
-            if not df_excel.empty:
-                # Si existe la columna 'fecha', la formateamos de forma segura
+            if not df_historial.empty:
+                # 1. Copia limpia para no alterar la app
+                df_excel = df_historial.copy()
+                
+                # 2. Forzamos la conversión de la fecha a datetime sin zona horaria
                 if "fecha" in df_excel.columns:
                     df_excel["fecha"] = pd.to_datetime(df_excel["fecha"], errors='coerce')
+                    # Quitamos cualquier zona horaria si existiera
+                    if pd.api.types.is_datetime64_any_dtype(df_excel["fecha"]):
+                        df_excel["fecha"] = df_excel["fecha"].dt.tz_localize(None)
+                    # La pasamos a texto limpio AAAA-MM-DD
                     df_excel["fecha"] = df_excel["fecha"].dt.strftime("%Y-%m-%d")
                 
-                # Eliminamos de raíz cualquier zona horaria en todas las columnas
+                # 3. Limpiamos cualquier otra columna de fecha por las dudas
                 for col in df_excel.columns:
-                    if pd.api.types.is_datetime64_any_dtype(df_excel[col]):
+                    if col != "fecha" and pd.api.types.is_datetime64_any_dtype(df_excel[col]):
                         df_excel[col] = df_excel[col].dt.tz_localize(None)
                 
-                # Filtramos y quitamos las columnas técnicas de IDs
+                # 4. Quitamos las columnas técnicas de IDs y filtros internos
                 columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
-                df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns])
+                df_excel = df_excel.drop(columns=[c for c in columnas_a_sacar if c in df_excel.columns], errors='ignore')
                 
-                # Reordenamos estéticamente
+                # 5. Reordenamos las columnas existentes en minúsculas
                 columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
-                df_excel = df_excel[[c for c in columnas_ordenadas if c in df_excel.columns]]
+                columnas_presentes = [c for c in columnas_ordenadas if c in df_excel.columns]
+                df_excel = df_excel[columnas_presentes]
                 
-                # Ponemos los nombres de las columnas lindos para el Excel
+                # 6. RECIÉN ACÁ renombramos estéticamente para el archivo final
                 df_excel.columns = [c.replace("_", " ").capitalize() for c in df_excel.columns]
 
+                # 7. Armamos el Excel nativo
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     df_excel.to_excel(writer, index=False, sheet_name='Movimientos')
@@ -272,16 +277,16 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
             else:
                 st.info("💡 Cuando registres tu primer movimiento del mes, vas a poder descargar la planilla de Excel desde acá.")
         except Exception as e:
-            # Si algo falla de fondo, te muestra el botón igual con un formato genérico en lugar de colgarse
-            st.warning("⚠️ Nota del sistema: Registrá un par de movimientos más para activar el diseño personalizado del Excel.")
+            st.warning(f"⚠️ Nota: Se generó una descarga directa por compatibilidad.")
             
-            # Botón de rescate (CSV o Excel directo sin formatear) para que nunca se queden a pata
+            # Descarga de contingencia directa sin formatear para que nunca falle
             buffer_simple = io.BytesIO()
-            df_historial.to_excel(buffer_simple, index=False)
+            with pd.ExcelWriter(buffer_simple, engine='openpyxl') as writer:
+                df_historial.to_excel(writer, index=False, sheet_name='Movimientos')
             st.download_button(
-                label="📥 Descargar Planilla de Emergencia",
+                label="📥 Descargar Planilla Directa",
                 data=buffer_simple.getvalue(),
-                file_name="Planilla_Movimientos_Taller.xlsx",
+                file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 # --- 📝 NUEVA OPERACIÓN (CON DESCUENTO CONECTADO DE STOCK) ---
