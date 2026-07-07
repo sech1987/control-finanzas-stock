@@ -191,66 +191,117 @@ with st.sidebar:
         if not criticos.empty:
             st.error(f"⚠️ ¡Falta reponer {len(criticos)} insumos!")
 
-# --- 🏠 DASHBOARD GENERAL ---
+# --- 🏠 DASHBOARD GENERAL (PULIDO VISUAL COMPLETO) ---
 if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
-    st.title("🏠 Panel de Control General")
+    st.title("💼 Panel de Control General")
     
-    # --- ALERTAS DE SALDOS DESFAVORABLES ---
+    # --- ALERTAS DE SALDOS DESFAVORABLES BLINDADAS ---
     if caja_negocio < 0:
-        st.error("⚠️ Alerta: La caja del emprendimiento se encuentra con saldo negativo / desfavorable.")
+        st.error("⚠️ **Alerta Financiera:** La caja del taller registra un saldo desfavorable (en rojo).")
     if billetera_personal < 0:
-        st.warning("⚠️ Alerta: Las finanzas personales registran saldo en rojo.")
+        st.warning("⚠️ **Alerta Personal:** Tus finanzas individuales están en rojo.")
 
+    # --- TARJETAS FINANCIERAS DE ALTO IMPACTO ---
     col1, col2 = st.columns(2)
     with col1:
+        # Tarjeta Caja Negocio con fondo Gris Oscuro Azulado y borde celeste
         with st.container(border=True):
-            st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold;'>FONDOS DISPONIBLES EMPRENDIMIENTO</p>", unsafe_allow_html=True)
-            color_n = "#F87171" if caja_negocio < 0 else "#38BDF8"
-            st.markdown(f"<h2 style='color: {color_n}; font-size: 42px; margin-top: 0px;'>$ {caja_negocio:,.2f}</h2>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div style='padding: 10px;'>
+                    <p style='color: #94A3B8; font-size: 13px; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.5px;'>
+                        🛠️ FONDOS DISPONIBLES EMPRENDIMIENTO
+                    </p>
+                    <h2 style='color: #38BDF8; font-size: 46px; font-weight: 800; margin: 0px;'>
+                        $ """ + f"{caja_negocio:,.2f}" + """
+                    </h2>
+                    <p style='color: #64748B; font-size: 12px; margin-top: 5px; margin-bottom: 0px;'>
+                        Capital total activo en la caja operativa de tu taller.
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+            
     with col2:
+        # Tarjeta Caja Personal con fondo Gris Oscuro Azulado y borde verde
         with st.container(border=True):
-            st.markdown("<p style='color: #94A3B8; font-size: 14px; font-weight: bold;'>FINANZAS PERSONALES (LIBRE)</p>", unsafe_allow_html=True)
-            color_p = "#F87171" if billetera_personal < 0 else "#34D399"
-            st.markdown(f"<h2 style='color: {color_p}; font-size: 42px; margin-top: 0px;'>$ {billetera_personal:,.2f}</h2>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div style='padding: 10px;'>
+                    <p style='color: #94A3B8; font-size: 13px; font-weight: bold; margin-bottom: 5px; letter-spacing: 0.5px;'>
+                        👤 FINANZAS PERSONALES (RETIRADO LIBRE)
+                    </p>
+                    <h2 style='color: #34D399; font-size: 46px; font-weight: 800; margin: 0px;'>
+                        $ """ + f"{billetera_personal:,.2f}" + """
+                    </h2>
+                    <p style='color: #64748B; font-size: 12px; margin-top: 5px; margin-bottom: 0px;'>
+                        Dinero extraído neto disponible para tus gastos personales cotidianos.
+                    </p>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
         
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("💡 Distribución Interna Recomendada")
     monto_negocio_total = max(0.0, caja_negocio)
+    
     sub_col1, sub_col2, sub_col3 = st.columns(3)
     with sub_col1:
-        with st.container(border=True): st.markdown(f"<p style='color: #38BDF8; font-size:13px; font-weight:bold; margin-bottom:2px;'>🛠️ CAJA INSUMOS (40%)</p><h3>$ {monto_negocio_total * 0.40:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style='text-align: center; padding: 5px;'>
+                    <p style='color: #38BDF8; font-size: 12px; font-weight: bold; margin-bottom: 2px;'>🛠️ CAJA INSUMOS (40%)</p>
+                    <h3 style='margin: 0px; font-size: 24px; color: #E2E8F0;'>$ """ + f"{monto_negocio_total * 0.40:,.2f}" + """</h3>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
     with sub_col2:
-        with st.container(border=True): st.markdown(f"<p style='color: #A78BFA; font-size:13px; font-weight:bold; margin-bottom:2px;'>💰 CAJA SUELDOS (40%)</p><h3>$ {monto_negocio_total * 0.40:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style='text-align: center; padding: 5px;'>
+                    <p style='color: #A78BFA; font-size: 12px; font-weight: bold; margin-bottom: 2px;'>💰 CAJA SUELDOS (40%)</p>
+                    <h3 style='margin: 0px; font-size: 24px; color: #E2E8F0;'>$ """ + f"{monto_negocio_total * 0.40:,.2f}" + """</h3>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
     with sub_col3:
-        with st.container(border=True): st.markdown(f"<p style='color: #FBBF24; font-size:13px; font-weight:bold; margin-bottom:2px;'>🔧 MANTENIMIENTO (20%)</p><h3>$ {monto_negocio_total * 0.20:,.2f}</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style='text-align: center; padding: 5px;'>
+                    <p style='color: #FBBF24; font-size: 12px; font-weight: bold; margin-bottom: 2px;'>🔧 MANTENIMIENTO (20%)</p>
+                    <h3 style='margin: 0px; font-size: 24px; color: #E2E8F0;'>$ """ + f"{monto_negocio_total * 0.20:,.2f}" + """</h3>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
 
     st.markdown("<br><hr style='border-color: #334155;'><br>", unsafe_allow_html=True)
     
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL (ULTRA BLINDADO SIN LIBRERÍAS ROTTAS) ---
+        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL ---
         st.subheader("📊 Exportar Historial Completo")
         try:
             df_csv = df_historial.copy()
-            
-            # Formateamos la fecha a texto limpio AAAA-MM-DD
             if "fecha" in df_csv.columns:
                 df_csv["fecha"] = pd.to_datetime(df_csv["fecha"], errors='coerce').dt.strftime("%Y-%m-%d")
             
-            # Borramos las columnas técnicas
             columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
             df_csv = df_csv.drop(columns=[c for c in columnas_a_sacar if c in df_csv.columns], errors='ignore')
             
-            # Reordenamos de forma prolija
             columnas_ordenadas = ["fecha", "cuenta", "tipo", "monto", "categoria", "detalle", "estado_pago", "metodo_pago"]
             columnas_presentes = [c for c in columnas_ordenadas if c in df_csv.columns]
             df_csv = df_csv[columnas_presentes]
-            
-            # Ponemos lindos los títulos de las columnas
             df_csv.columns = [c.replace("_", " ").capitalize() for c in df_csv.columns]
 
-            # Convertimos a CSV separado por punto y coma, ideal para Excel en Latinoamérica
             csv_data = df_csv.to_csv(index=False, sep=';', encoding='utf-8-sig')
             
             st.download_button(
@@ -272,7 +323,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Procesamiento para agrupar los bloques visuales por mes
         df_historial_visual = df_historial.copy()
         df_historial_visual["fecha_dt"] = pd.to_datetime(df_historial_visual["fecha"], errors='coerce')
         df_historial_visual["Mes"] = df_historial_visual["fecha_dt"].dt.strftime("%Y-%m").fillna("Sin Fecha")
@@ -332,16 +382,16 @@ elif seccion == "📝 Nueva Operación":
             
             descuenta_stock = False
             insumo_seleccionado = None
-            cantidad_a_descontar = 0
+            amount_to_deduct = 0
             
-            if not df_stock.empty and category == "Venta Producto" or categoria == "Venta Producto":
+            if not df_stock.empty and categoria == "Venta Producto":
                 descuenta_stock = st.checkbox("🔄 ¿Esta venta descuenta materiales del Stock?")
                 if descuenta_stock:
                     col_st1, col_st2 = st.columns(2)
                     with col_st1:
                         insumo_seleccionado = st.selectbox("Seleccionar Insumo consumido:", df_stock["item"].tolist())
                     with col_st2:
-                        cantidad_a_descontar = st.number_input("Cantidad de unidades utilizadas:", min_value=1, value=1, step=1)
+                        amount_to_deduct = st.number_input("Cantidad de unidades utilizadas:", min_value=1, value=1, step=1)
 
             col_v1, col_v2 = st.columns(2)
             with col_v1:
@@ -356,7 +406,7 @@ elif seccion == "📝 Nueva Operación":
             if st.button("Guardar e Imprimir Comprobante", type="primary"):
                 detalle_final = nota
                 if descuenta_stock and insumo_seleccionado:
-                    detalle_final = f"{detalle_final} [Descontado {cantidad_a_descontar} un. de {insumo_seleccionado}]"
+                    detalle_final = f"{detalle_final} [Descontado {amount_to_deduct} un. de {insumo_seleccionado}]"
                 
                 detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
                 
@@ -377,7 +427,7 @@ elif seccion == "📝 Nueva Operación":
                     fila_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
                     id_insumo = int(fila_insumo["id"])
                     cant_actual = int(fila_insumo["cantidad"])
-                    nueva_cantidad = max(0, cant_actual - cantidad_a_descontar)
+                    nueva_cantidad = max(0, cant_actual - amount_to_deduct)
                     supabase.table("stock").update({"cantidad": nueva_cantidad}).eq("id", id_insumo).execute()
                 
                 fecha_hoy = datetime.now().strftime("%d/%m/%Y")
@@ -635,7 +685,7 @@ elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
                 st.warning("Por favor, completa todos los campos del formulario.")
                 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📋 Colaboradores con acceso activo:")
+    st.subheader("📋 Colaboradores con acceso acceso activo:")
     
     try:
         res_team = supabase.table("usuarios").select("*").eq("owner_id", u_id).eq("rol", "Empleado").execute()
