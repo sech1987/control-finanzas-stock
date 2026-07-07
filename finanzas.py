@@ -191,7 +191,7 @@ with st.sidebar:
         if not criticos.empty:
             st.error(f"⚠️ ¡Falta reponer {len(criticos)} insumos!")
 
-# --- 🏠 DASHBOARD GENERAL (PULIDO VISUAL COMPLETO) ---
+# --- 🏠 DASHBOARD GENERAL ---
 if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("💼 Panel de Control General")
     
@@ -204,7 +204,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     # --- TARJETAS FINANCIERAS DE ALTO IMPACTO ---
     col1, col2 = st.columns(2)
     with col1:
-        # Tarjeta Caja Negocio con fondo Gris Oscuro Azulado y borde celeste
         with st.container(border=True):
             st.markdown(
                 """
@@ -224,7 +223,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
             )
             
     with col2:
-        # Tarjeta Caja Personal con fondo Gris Oscuro Azulado y borde verde
         with st.container(border=True):
             st.markdown(
                 """
@@ -287,7 +285,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL ---
         st.subheader("📊 Exportar Historial Completo")
         try:
             df_csv = df_historial.copy()
@@ -482,9 +479,13 @@ elif seccion == "📝 Nueva Operación":
                 supabase.table("historial").insert(datos_insertar).execute()
                 st.rerun()
 
-# --- 🧮 CALCULADORA DE COSTOS ---
+# --- 🧮 CALCULADORA DE COSTOS (CON MODO CLIENTE INTEGRADO) ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
     st.title("🧮 Calculadora de Costos y Precio de Venta")
+    
+    # Interruptor para activar la privacidad en el mostrador
+    modo_cliente = st.toggle("👁️ Modo Vista Cliente (Ocultar Costos y Ganancias)", value=False)
+    
     col_calc1, col_calc2 = st.columns([4, 3])
     with col_calc1:
         with st.container(border=True):
@@ -506,11 +507,17 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             st.markdown("<p style='text-align: center; color: #94A3B8; font-weight: bold; font-size: 14px;'>PRECIO SUGERIDO AL CLIENTE</p>", unsafe_allow_html=True)
             st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px; margin-top: 0px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
             st.markdown("---")
-            st.write(f"📦 **Materiales:** $ {costo_materiales:,.2f}")
-            st.write(f"👤 **Mano de Obra:** $ {costo_mano_obra:,.2f}")
-            st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
-            st.markdown(f"📉 **Costo Base Total:** $ {costo_total_fabricacion:,.2f}")
-            st.markdown(f"💰 **Tu Ganancia Neta ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
+            
+            # Si el modo cliente está encendido, ocultamos el desglose interno de los costos
+            if modo_cliente:
+                st.info("🔒 **Modo Cliente Activo:** El desglose de costos fijos, insumos y porcentaje de ganancia neta se encuentra oculto para proteger tus márgenes comerciales en mostrador.")
+            else:
+                st.write(f"📦 **Materiales:** $ {costo_materiales:,.2f}")
+                st.write(f"👤 **Mano de Obra:** $ {costo_mano_obra:,.2f}")
+                st.write(f"⚡ **Costos Fijos:** $ {costo_fijos_prod:,.2f}")
+                st.markdown(f"📉 **Costo Base Total:** $ {costo_total_fabricacion:,.2f}")
+                st.markdown(f"💰 **Tu Ganancia Neta ({porcentaje_ganancia}%):** $ {monto_ganancia_comercial:,.2f}")
+            
             st.markdown("---")
             desc_prod = nombre_prod if nombre_prod.strip() else "Producto Personalizado"
             texto_presupuesto = f"📄 *PRESUPUESTO ESTIMADO*\n\n✨ *Detalle:* {desc_prod}\n💰 *Inversión Total:* $ {precio_venta_sugerido:,.2f}\n\n📌 *Condición:* Seña del 50% para iniciar producción. Validez por 7 días."
