@@ -1,10 +1,3 @@
-¡Tenés toda la razón, socio! Para no dejar nada en el aire ni arriesgar a que se pise alguna sangría o línea clave, lo mejor es tener el mapa completo.
-
-Como agregamos la importación de la librería de Google arriba de todo y el nuevo botón en el menú, acá te dejo el código completo de finanzas.py con la IA de Gemini totalmente integrada.
-
-Copiá todo este bloque y reemplazá por completo tu archivo en VS Code:
-
-Python
 import streamlit as st
 import pandas as pd
 import hashlib
@@ -107,6 +100,7 @@ if not st.session_state.autenticado:
                         try:
                             check_user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                             if check_user.data:
+                               _user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                                 st.error("❌ Este correo ya se encuentra registrado.")
                             else:
                                 hash_seguro = encriptar_contrasena(reg_pass)
@@ -193,7 +187,6 @@ with st.sidebar:
     st.markdown("---")
     
     if rol_actual == "Admin":
-        # Sumamos al Consultor IA en el segundo lugar del menú
         opciones_menu = ["🏠 Dashboard General", "🤖 Consultor IA", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
     else:
         opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos", "📊 Mi Cierre de Caja"]
@@ -401,7 +394,6 @@ elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
         st.write(f"💰 **Caja del Negocio:** $ {caja_negocio:,.2f}")
         st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
         
-        # Analizamos stock crítico
         items_criticos = []
         if not df_stock.empty:
             items_criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]["item"].tolist()
@@ -410,7 +402,6 @@ elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
     if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
             try:
-                # Armamos el lote de datos anónimo pero rico en contexto financiero
                 historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
                 
                 resumen_data = f"""
