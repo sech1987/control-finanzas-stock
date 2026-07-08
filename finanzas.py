@@ -100,7 +100,6 @@ if not st.session_state.autenticado:
                         try:
                             check_user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                             if check_user.data:
-                               _user = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
                                 st.error("❌ Este correo ya se encuentra registrado.")
                             else:
                                 hash_seguro = encriptar_contrasena(reg_pass)
@@ -763,7 +762,7 @@ elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
                 st.warning("Por favor, completa todos los campos del formulario.")
                 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📋 Colaboradores con acceso acceso activo:")
+    st.subheader("📋 Colaboradores con acceso activo:")
     
     try:
         res_team = supabase.table("usuarios").select("*").eq("owner_id", u_id).eq("rol", "Empleado").execute()
