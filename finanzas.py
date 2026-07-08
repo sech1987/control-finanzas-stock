@@ -4,14 +4,6 @@ import hashlib
 from datetime import datetime, timezone
 from supabase import create_client, Client
 import io
-import google.generativeai as genai
-
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-#try:
-#    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-#    model = genai.GenerativeModel('gemini-1.5-flash')
-#except Exception as e:
-#    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
@@ -186,7 +178,7 @@ with st.sidebar:
     st.markdown("---")
     
     if rol_actual == "Admin":
-        opciones_menu = ["🏠 Dashboard General", "🤖 Consultor IA", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
+        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
     else:
         opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos", "📊 Mi Cierre de Caja"]
         
@@ -381,57 +373,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                         if st.button("🗑️", key=f"del_egr_{row['id']}"):
                             supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                             st.rerun()
-
-# --- 🤖 MÓDULO CONSULTOR IA ---
-elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
-    st.title("🤖 Consultor Financiero IA Inteligente")
-    st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización, fugas de dinero y estrategias de precios.")
-    
-    with st.container(border=True):
-        st.subheader("📊 Resumen Enviado al Consultor")
-        st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
-        st.write(f"💰 **Caja del Negocio:** $ {caja_negocio:,.2f}")
-        st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
-        
-        items_criticos = []
-        if not df_stock.empty:
-            items_criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]["item"].tolist()
-        st.write(f"📦 **Insumos Críticos a Reponer:** {', '.join(items_criticos) if items_criticos else 'Ninguno (Stock Ok)'}")
-
-    if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
-        with st.spinner("🤖 Analizando base de datos en tiempo real..."):
-            try:
-                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-                
-                resumen_data = f"""
-                Nombre del Taller: {st.session_state.nombre_taller}
-                Saldo de Caja Operativa: ${caja_negocio:.2f}
-                Dinero Retirado por Dueño: ${billetera_personal:.2f}
-                Lista de insumos críticos sin stock: {items_criticos}
-                Últimos movimientos cargados en sistema:
-                {historial_texto}
-                """
-                
-                prompt_expert = f"""
-                Actúa como un experto consultor financiero y estratega de negocios especializado en talleres gráficos, imprentas y locales de personalización.
-                Analizá detenidamente la siguiente base de datos real del negocio:
-                {resumen_data}
-                
-                Por favor, devolveme un reporte estructurado con:
-                1. 📈 **Diagnóstico Operativo:** Análisis corto de cómo ven las cajas y el balance.
-                2. ⚠️ **Fugas de Dinero o Riesgos:** Alertas sobre el stock crítico o movimientos sospechosos de gastos.
-                3. 🎯 **3 Consejos Clave de Rentabilidad:** Estrategias de precios, ahorro o inyección de capital directas para este taller.
-                
-                Habla en español rioplatense (Argentina), de forma directa, motivadora, usando términos claros de negocio pero con mucha cercanía, como un socio estratégico.
-                """
-                
-                response = model.generate_content(prompt_expert)
-                st.markdown("<br><hr>", unsafe_allow_html=True)
-                st.markdown(response.text)
-                
-            except Exception as e:
-                st.error(f"❌ No se pudo conectar con el modelo de IA: {e}")
-                st.info("💡 Asegurate de haber guardado tu GOOGLE_API_KEY en los Secrets de Streamlit Cloud y haber agregado google-generativeai a requirements.txt.")
 
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
