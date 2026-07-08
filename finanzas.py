@@ -1,9 +1,24 @@
+¡Tenés toda la razón, socio! Para no dejar nada en el aire ni arriesgar a que se pise alguna sangría o línea clave, lo mejor es tener el mapa completo.
+
+Como agregamos la importación de la librería de Google arriba de todo y el nuevo botón en el menú, acá te dejo el código completo de finanzas.py con la IA de Gemini totalmente integrada.
+
+Copiá todo este bloque y reemplazá por completo tu archivo en VS Code:
+
+Python
 import streamlit as st
 import pandas as pd
 import hashlib
 from datetime import datetime, timezone
 from supabase import create_client, Client
 import io
+import google.generativeai as genai
+
+# --- CONFIGURACIÓN DE IA (GEMINI) ---
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
 
 st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
 
@@ -178,7 +193,8 @@ with st.sidebar:
     st.markdown("---")
     
     if rol_actual == "Admin":
-        opciones_menu = ["🏠 Dashboard General", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
+        # Sumamos al Consultor IA en el segundo lugar del menú
+        opciones_menu = ["🏠 Dashboard General", "🤖 Consultor IA", "📝 Nueva Operación", "🧮 Calculadora de Costos", "📦 Stock de Insumos", "📉 Punto de Equilibrio", "🎯 Metas de Ahorro", "⚙️ Configurar Categorías", "📊 Mi Cierre de Caja", "👥 Personal del Taller"]
     else:
         opciones_menu = ["📝 Nueva Operación", "📦 Stock de Insumos", "📊 Mi Cierre de Caja"]
         
@@ -195,13 +211,11 @@ with st.sidebar:
 if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("💼 Panel de Control General")
     
-    # --- ALERTAS DE SALDOS DESFAVORABLES BLINDADAS ---
     if caja_negocio < 0:
         st.error("⚠️ **Alerta Financiera:** La caja del taller registra un saldo desfavorable (en rojo).")
     if billetera_personal < 0:
         st.warning("⚠️ **Alerta Personal:** Tus finanzas individuales están en rojo.")
 
-    # --- TARJETAS FINANCIERAS DE ALTO IMPACTO ---
     col1, col2 = st.columns(2)
     with col1:
         with st.container(border=True):
@@ -285,7 +299,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     if df_historial.empty:
         st.info("No hay movimientos registrados todavía.")
     else:
-        # --- 📥 BAJAR PLANILLA EN FORMATO CSV COMPATIBLE CON EXCEL ---
         st.subheader("📊 Exportar Historial Completo")
         try:
             df_csv = df_historial.copy()
@@ -321,7 +334,6 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
 
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Procesamos las fechas para la vista mensual estructurada
         df_historial_visual = df_historial.copy()
         df_historial_visual["fecha_dt"] = pd.to_datetime(df_historial_visual["fecha"], errors='coerce')
         df_historial_visual["Mes"] = df_historial_visual["fecha_dt"].dt.strftime("%Y-%m").fillna("Sin Fecha")
@@ -329,20 +341,16 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
         mes_sel = st.selectbox("📆 Seleccionar Período:", sorted(df_historial_visual["Mes"].unique(), reverse=True))
         df_mes = df_historial_visual[df_historial_visual["Mes"] == mes_sel]
         
-        # --- 📊 NUEVO MÓDULO: GRÁFICO COMPARATIVO MENSUAL ---
         st.subheader("📈 Balance Financiero Mensual")
         with st.container(border=True):
-            # Calculamos totales del mes actual seleccionado
             total_ingresos_mes = df_mes[(df_mes["tipo"] == "Ingreso") & (df_mes["estado_pago"] != "Presupuesto")]["monto"].sum()
             total_egresos_mes = df_mes[df_mes["tipo"] == "Gasto"]["monto"].sum()
             
-            # Construimos un dataframe compacto exclusivo para alimentar el gráfico de barras de Streamlit
             df_grafico = pd.DataFrame({
                 "Tipo": ["📥 Ventas / Ingresos", "📤 Gastos / Egresos"],
                 "Monto ($)": [total_ingresos_mes, total_egresos_mes]
             }).set_index("Tipo")
             
-            # Renderizamos el gráfico nativo
             st.bar_chart(df_grafico, y="Monto ($)", color="#4F46E5", use_container_width=True)
             st.caption(f"Resumen del período {mes_sel}: Registraste **$ {total_ingresos_mes:,.2f}** en ingresos contra **$ {total_egresos_mes:,.2f}** en egresos operativos.")
         
@@ -381,6 +389,59 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                         if st.button("🗑️", key=f"del_egr_{row['id']}"):
                             supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                             st.rerun()
+
+# --- 🤖 MÓDULO CONSULTOR IA ---
+elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
+    st.title("🤖 Consultor Financiero IA Inteligente")
+    st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización, fugas de dinero y estrategias de precios.")
+    
+    with st.container(border=True):
+        st.subheader("📊 Resumen Enviado al Consultor")
+        st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
+        st.write(f"💰 **Caja del Negocio:** $ {caja_negocio:,.2f}")
+        st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
+        
+        # Analizamos stock crítico
+        items_criticos = []
+        if not df_stock.empty:
+            items_criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]["item"].tolist()
+        st.write(f"📦 **Insumos Críticos a Reponer:** {', '.join(items_criticos) if items_criticos else 'Ninguno (Stock Ok)'}")
+
+    if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
+        with st.spinner("🤖 Analizando base de datos en tiempo real..."):
+            try:
+                # Armamos el lote de datos anónimo pero rico en contexto financiero
+                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
+                
+                resumen_data = f"""
+                Nombre del Taller: {st.session_state.nombre_taller}
+                Saldo de Caja Operativa: ${caja_negocio:.2f}
+                Dinero Retirado por Dueño: ${billetera_personal:.2f}
+                Lista de insumos críticos sin stock: {items_criticos}
+                Últimos movimientos cargados en sistema:
+                {historial_texto}
+                """
+                
+                prompt_expert = f"""
+                Actúa como un experto consultor financiero y estratega de negocios especializado en talleres gráficos, imprentas y locales de personalización.
+                Analizá detenidamente la siguiente base de datos real del negocio:
+                {resumen_data}
+                
+                Por favor, devolveme un reporte estructurado con:
+                1. 📈 **Diagnóstico Operativo:** Análisis corto de cómo ven las cajas y el balance.
+                2. ⚠️ **Fugas de Dinero o Riesgos:** Alertas sobre el stock crítico o movimientos sospechosos de gastos.
+                3. 🎯 **3 Consejos Clave de Rentabilidad:** Estrategias de precios, ahorro o inyección de capital directas para este taller.
+                
+                Habla en español rioplatense (Argentina), de forma directa, motivadora, usando términos claros de negocio pero con mucha cercanía, como un socio estratégico.
+                """
+                
+                response = model.generate_content(prompt_expert)
+                st.markdown("<br><hr>", unsafe_allow_html=True)
+                st.markdown(response.text)
+                
+            except Exception as e:
+                st.error(f"❌ No se pudo conectar con el modelo de IA: {e}")
+                st.info("💡 Asegurate de haber guardado tu GOOGLE_API_KEY en los Secrets de Streamlit Cloud y haber agregado google-generativeai a requirements.txt.")
 
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
