@@ -181,7 +181,7 @@ if not df_historial.empty:
     ingresos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Ingreso")]["monto"].sum()
     gastos_p = df_historial[(df_historial["cuenta"] == "Personal") & (df_historial["tipo"] == "Gasto")]["monto"].sum()
     billetera_personal = ingresos_p - gastos_p
-    # --- NAVEGACIÓN ---
+   # --- NAVEGACIÓN ---
 with st.sidebar:
     st.markdown(f"<h2 style='color: #4F46E5; margin-top: 0px;'>⚡ {st.session_state.nombre_taller}</h2>", unsafe_allow_html=True)
     st.caption(f"Rol Activo: **{rol_actual}**")
@@ -388,7 +388,8 @@ elif seccion == "📝 Nueva Operación":
             met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
             nota = st.text_input("Detalle:")
             if st.button("Guardar Gasto", type="primary"):
-                supabase.table("historial").insert({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": mexport_pago, "usuario_id": data_scope_id}).execute()
+                # REEMPLAZADO MEXPORT_PAGO POR MET_PAGO (CORRECCIÓN CRÍTICA)
+                supabase.table("historial").insert({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago, "usuario_id": data_scope_id}).execute()
                 st.rerun()
 
         elif opcion == "Retirar Sueldo" and rol_actual == "Admin":
