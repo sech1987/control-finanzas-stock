@@ -1,0 +1,78 @@
+{
+    "caja_negocio": 0.0,
+    "billetera_personal": 31500.0,
+    "categorias_negocio_ingreso": [
+        "Venta Producto",
+        "Servicio",
+        "suscripcion softwear"
+    ],
+    "categorias_negocio_gasto": [
+        "Insumos",
+        "Publicidad",
+        "Herramientas"
+    ],
+    "categorias_personal_gasto": [
+        "Alimentos",
+        "Servicios",
+        "Ocio"
+    ],
+    "historial": [
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Negocio",
+            "tipo": "Ingreso",
+            "monto": 15000.0,
+            "categoria": "suscripcion softwear"
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Negocio",
+            "tipo": "Ingreso",
+            "monto": 15000.0,
+            "categoria": "suscripcion softwear"
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Negocio",
+            "tipo": "Ingreso",
+            "monto": 1500.0,
+            "categoria": "Venta Producto",
+            "detalle": ""
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Negocio",
+            "tipo": "Gasto",
+            "monto": 20000.0,
+            "categoria": "Retiro de Socio",
+            "detalle": "Retiro de ganancias"
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Personal",
+            "tipo": "Ingreso",
+            "monto": 20000.0,
+            "categoria": "Sueldo",
+            "detalle": "Ingreso desde Negocio"
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Negocio",
+            "tipo": "Gasto",
+            "monto": 11500.0,
+            "categoria": "Retiro de Socio",
+            "detalle": "Retiro de ganancias"
+        },
+        {
+            "fecha": "2026-06-25",
+            "cuenta": "Personal",
+            "tipo": "Ingreso",
+            "monto": 11500.0,
+            "categoria": "Sueldo",
+            "detalle": "Ingreso desde Negocio"
+        }
+    ],
+    "costos_fijos_negocio": 500000.0,
+    "meta_ahorro_nombre": "cambio pc",
+    "meta_ahorro_monto": 100000.0
+}

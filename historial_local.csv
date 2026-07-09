@@ -1,0 +1,5 @@
+fecha,cuenta,tipo,monto,categoria,detalle,estado_pago,metodo_pago
+2026-07-04,Negocio,Ingreso,5500.0,Venta Producto,Cliente: Romi Vidal | Impresion,Total,Transferencia
+2026-07-04,Negocio,Ingreso,13600.0,Venta Producto,Impresion,Total,Mercado Pago
+2026-07-04,Negocio,Ingreso,10400.0,Venta Producto,Cliente: Daiana Sanchez | Impresion,Total,Mercado Pago
+2026-07-04,Negocio,Ingreso,1600.0,Venta Producto,Cliente: Yesi Haurie | Impresion,Total,Efectivo
