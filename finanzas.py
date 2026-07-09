@@ -58,13 +58,16 @@ if not st.session_state.autenticado:
                 if st.button("Ingresar al Panel", use_container_width=True, type="primary"):
                     if email_input and pass_input:
                         
-                        # ACCESO DIRECTO PARA OLIVIA IMAGEN
+                        # ==========================================
+                        # 🔥 ACCESO DIRECTO BLINDADO PARA OLIVIA IMAGEN
+                        # ==========================================
                         if email_input == "admin@olivia.com" and pass_input == "taller2026":
                             st.session_state.autenticado = True
                             st.session_state.usuario_id = 1
                             st.session_state.nombre_taller = "Olivia Imagen"
                             st.session_state.user_rol = "Admin"
                             st.rerun()
+                        # ==========================================
                         
                         else:
                             pass_encriptada = encriptar_contrasena(pass_input)
@@ -209,7 +212,7 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("💼 Panel de Control General")
     
     if caja_negocio < 0:
-        st.error("⚠️ **Alerta Financiera:** La caja del taller registra un saldo desfavorable.")
+        st.error("⚠️ **Alerta Financiera:** La caja del taller registra un saldo desfavorable (en rojo).")
     if billetera_personal < 0:
         st.warning("⚠️ **Alerta Personal:** Tus finanzas individuales están en rojo.")
 
@@ -240,8 +243,18 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
         st.info("No hay movimientos registrados todavía.")
     else:
         st.subheader("📊 Exportar Historial Completo")
-        csv_data = df_historial.to_csv(index=False, sep=';', encoding='utf-8-sig')
-        st.download_button(label="📥 Descargar Planilla de Movimientos (CSV)", data=csv_data, file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.csv", mime="text/csv", type="primary")
+        try:
+            df_csv = df_historial.copy()
+            if "fecha" in df_csv.columns:
+                df_csv["fecha"] = pd.to_datetime(df_csv["fecha"], errors='coerce').dt.strftime("%Y-%m-%d")
+            columnas_a_sacar = ["id", "usuario_id", "Mes", "fecha_txt"]
+            df_csv = df_csv.drop(columns=[c for c in columnas_a_sacar if c in df_csv.columns], errors='ignore')
+            df_csv.columns = [c.replace("_", " ").capitalize() for c in df_csv.columns]
+            csv_data = df_csv.to_csv(index=False, sep=';', encoding='utf-8-sig')
+            st.download_button(label="📥 Descargar Planilla de Movimientos (Excel/CSV)", data=csv_data, file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.csv", mime="text/csv", type="primary")
+        except Exception:
+            csv_simple = df_historial.to_csv(index=False, sep=';', encoding='utf-8-sig')
+            st.download_button(label="📥 Descargar Planilla Directa (CSV)", data=csv_simple, file_name=f"Planilla_Movimientos_{st.session_state.nombre_taller}.csv", mime="text/csv")
 
         st.markdown("<br>", unsafe_allow_html=True)
         df_historial_visual = df_historial.copy()
@@ -255,103 +268,280 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
         with st.container(border=True):
             total_ingresos_mes = df_mes[(df_mes["tipo"] == "Ingreso") & (df_mes["estado_pago"] != "Presupuesto")]["monto"].sum()
             total_egresos_mes = df_mes[df_mes["tipo"] == "Gasto"]["monto"].sum()
-            df_grafico = pd.DataFrame({"Tipo": ["📥 Ventas", "📤 Gastos"], "Monto ($)": [total_ingresos_mes, total_egresos_mes]}).set_index("Tipo")
+            df_grafico = pd.DataFrame({"Tipo": ["📥 Ventas / Ingresos", "📤 Gastos / Egresos"], "Monto ($)": [total_ingresos_mes, total_egresos_mes]}).set_index("Tipo")
             st.bar_chart(df_grafico, y="Monto ($)", color="#4F46E5", use_container_width=True)
         
-        tab_ingresos, tab_egresos = st.tabs(["📥 INGRESOS (Ventas)", "📤 EGRESOS (Gastos)"])
+        tab_ingresos, tab_egresos = st.tabs(["📥 Historial de INGRESOS (Ventas)", "📤 Historial de EGRESOS (Gastos)"])
         with tab_ingresos:
             for idx, row in df_mes[df_mes["tipo"] == "Ingreso"][::-1].iterrows():
                 with st.container(border=True):
-                    c_f, c_m, c_d, c_b = st.columns([1, 2, 4, 1])
-                    c_f.caption(str(row["fecha"]))
-                    c_m.markdown(f"**$ {float(row['monto']):,.2f}**")
-                    c_d.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}")
-                    if c_b.button("🗑️", key=f"del_ing_{row['id']}"):
+                    col_h1, col_h2, col_h3, col_h4 = st.columns([1, 2, 4, 1])
+                    fecha_str = row["fecha_dt"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_dt"]) else str(row["fecha"])
+                    col_h1.caption(fecha_str)
+                    col_h2.markdown(f"**$ {float(row['monto']):,.2f}**")
+                    col_h3.markdown(f"🔹 *{row['categoria']}* — {row['detalle']}\n\nCondición: **{row['estado_pago']}** | Medio: **{row['metodo_pago']}**")
+                    if col_h4.button("🗑️", key=f"del_ing_{row['id']}"):
                         supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                         st.rerun()
         with tab_egresos:
             for idx, row in df_mes[df_mes["tipo"] == "Gasto"][::-1].iterrows():
                 with st.container(border=True):
-                    c_f, c_m, c_d, c_b = st.columns([1, 2, 4, 1])
-                    c_f.caption(str(row["fecha"]))
-                    c_m.markdown(f"**$ {float(row['monto']):,.2f}**")
-                    c_d.markdown(f"🔸 *{row['categoria']}* — {row['detalle']}")
-                    if c_b.button("🗑️", key=f"del_egr_{row['id']}"):
+                    col_e1, col_e2, col_e3, col_e4 = st.columns([1, 2, 4, 1])
+                    fecha_str = row["fecha_dt"].strftime("%Y-%m-%d") if pd.notnull(row["fecha_dt"]) else str(row["fecha"])
+                    col_e1.caption(fecha_str)
+                    col_e2.markdown(f"**$ {float(row['monto']):,.2f}**")
+                    lbl = "⚙️ GASTO TALLER" if row["cuenta"] == "Negocio" else "👤 PERSONAL"
+                    col_e3.markdown(f"**{lbl}** | *{row['categoria']}*\n\n{row['detalle']}")
+                    if col_e4.button("🗑️", key=f"del_egr_{row['id']}"):
                         supabase.table("historial").delete().eq("id", int(row["id"])).execute()
                         st.rerun()
 
 # --- 🤖 MÓDULO CONSULTOR IA ---
 elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
     st.title("🤖 Consultor Financiero IA Inteligente")
-    st.markdown("Dejá que la IA analice tus números para encontrar áreas de optimización.")
+    st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización, fugas de dinero y estrategias de precios.")
     
+    with st.container(border=True):
+        st.subheader("📊 Resumen Enviado al Consultor")
+        st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
+        st.write(f"💰 **Caja del Negocio:** $ {caja_negocio:,.2f}")
+        st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
+        items_criticos = []
+        if not df_stock.empty:
+            items_criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]["item"].tolist()
+        st.write(f"📦 **Insumos Críticos a Reponer:** {', '.join(items_criticos) if items_criticos else 'Ninguno (Stock Ok)'}")
+
     if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
-        with st.spinner("🤖 Analizando base de datos..."):
+        with st.spinner("🤖 Analizando base de datos en tiempo real..."):
             try:
-                hist_txt = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos"
-                prompt = f"Actúa como consultor financiero para el taller gráfico {st.session_state.nombre_taller}. Caja: ${caja_negocio:.2f}. Historial:\n{hist_txt}\nBrindá un diagnóstico corto y motivador en español rioplatense (Argentina)."
-                response = model.generate_content(prompt)
+                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
+                resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos}\nHistorial:\n{historial_texto}"
+                prompt_expert = f"Actúa como consultor financiero estratégico para talleres gráficos y de personalización. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense (Argentina), de forma directa, corporativa pero cercana."
+                response = model.generate_content(prompt_expert)
+                st.markdown("<br><hr>", unsafe_allow_html=True)
                 st.markdown(response.text)
             except Exception as e:
-                st.error(f"❌ Error de IA: {e}")
+                st.error(f"❌ No se pudo conectar con el modelo de IA: {e}")
 
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
     opciones_carga = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio"] if rol_actual == "Empleado" else ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"]
-    opcion = st.selectbox("¿Qué vas a registrar?", opciones_carga)
+    opcion = st.selectbox("¿Qué vas a registrar hoy?", opciones_carga)
     
     with st.container(border=True):
-        monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
-        nota = st.text_input("Detalle:")
-        if st.button("Guardar Registro", type="primary"):
-            tipo_op = "Ingreso" if "Venta" in opcion else "Gasto"
-            datos = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio" if "Negocio" in opcion or "Venta" in opcion else "Personal", "tipo": tipo_op, "monto": float(monto), "categoria": "General", "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
-            supabase.table("historial").insert(datos).execute()
-            st.success("¡Guardado!")
-            st.rerun()
+        if opcion == "Registrar Venta / Presupuesto":
+            if "ultimo_comprobante" not in st.session_state:
+                st.session_state.ultimo_comprobante = None
+                st.session_state.tipo_comprobante = None
+
+            monto = st.number_input("Monto total ($)", min_value=0.0, step=50.0)
+            categoria = st.selectbox("Categoría", categorias_ingreso)
+            descuenta_stock = False
+            insumo_seleccionado = None
+            amount_to_deduct = 0
+            
+            if not df_stock.empty and categoria == "Venta Producto":
+                descuenta_stock = st.checkbox("🔄 ¿Esta venta descuenta materiales del Stock?")
+                if descuenta_stock:
+                    col_st1, col_st2 = st.columns(2)
+                    insumo_seleccionado = col_st1.selectbox("Seleccionar Insumo:", df_stock["item"].tolist())
+                    amount_to_deduct = col_st2.number_input("Cantidad utilizada:", min_value=1, value=1, step=1)
+
+            col_v1, col_v2 = st.columns(2)
+            est_pago = col_v1.selectbox("Condición:", ["Total Pagado", "Seña", "Fiado", "Presupuesto"])
+            estado_guardar = "Total" if est_pago == "Total Pagado" else est_pago
+            met_pago = col_v2.selectbox("Medio de Cobro:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta", "Ninguno (Presupuesto)"])
+            cliente_nombre = st.text_input("Nombre del Cliente (Opcional):")
+            nota = st.text_input("Detalle del trabajo / Producto:")
+
+            if st.button("Guardar e Imprimir Comprobante", type="primary"):
+                detalle_final = nota
+                if descuenta_stock and insumo_seleccionado:
+                    detalle_final = f"{detalle_final} [Descontado {amount_to_deduct} un. de {insumo_seleccionado}]"
+                detalle_final = f"Cliente: {cliente_nombre} | {detalle_final}" if cliente_nombre else detalle_final
+                
+                datos_insertar = {"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Ingreso", "monto": float(monto), "categoria": categoria, "detalle": detalle_final, "estado_pago": estado_guardar, "metodo_pago": met_pago, "usuario_id": data_scope_id}
+                supabase.table("historial").insert(datos_insertar).execute()
+                
+                if descuenta_stock and insumo_seleccionado:
+                    fila_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
+                    nueva_cantidad = max(0, int(fila_insumo["cantidad"]) - amount_to_deduct)
+                    supabase.table("stock").update({"cantidad": nueva_cantidad}).eq("id", int(fila_insumo["id"])).execute()
+                
+                fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+                nom_c = cliente_nombre.strip() if cliente_nombre else "Cliente"
+                if estado_guardar == "Total":
+                    st.session_state.ultimo_comprobante = f"🧾 *COMPROBANTE DE PAGO*\n\n📅 *Fecha:* {fecha_hoy}\n👤 *Cliente:* {nom_c}\n💼 *Detalle:* {nota}\n💰 *Total Abonado:* $ {monto:,.2f}\n💳 *Medio:* {met_pago}"
+                    st.session_state.tipo_comprobante = "¡Recibo guardado!"
+                st.rerun()
+
+            if st.session_state.ultimo_comprobante:
+                st.success(st.session_state.tipo_comprobante)
+                st.text_area("Texto listo para WhatsApp:", value=st.session_state.ultimo_comprobante, height=150)
+                if st.button("Limpiar Pantalla"):
+                    st.session_state.ultimo_comprobante = None
+                    st.rerun()
+
+        elif opcion == "Registrar Gasto Negocio":
+            monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
+            categoria = st.selectbox("Categoría", categorias_gasto_negocio)
+            met_pago = st.selectbox("Pagado desde:", ["Efectivo", "Mercado Pago", "Transferencia", "Tarjeta"])
+            nota = st.text_input("Detalle:")
+            if st.button("Guardar Gasto", type="primary"):
+                supabase.table("historial").insert({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": categoria, "detalle": nota, "estado_pago": "Total", "metodo_pago": met_pago, "usuario_id": data_scope_id}).execute()
+                st.rerun()
+
+        elif opcion == "Retirar Sueldo" and rol_actual == "Admin":
+            monto = st.number_input("Monto a extraer ($)", min_value=0.0, max_value=max(0.0, caja_negocio), step=50.0)
+            if st.button("Confirmar Retiro", type="primary"):
+                f = datetime.now().strftime("%Y-%m-%d")
+                supabase.table("historial").insert([
+                    {"fecha": f, "cuenta": "Negocio", "tipo": "Gasto", "monto": float(monto), "categoria": "Retiro de Socio", "detalle": "Retiro ganancias", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id},
+                    {"fecha": f, "cuenta": "Personal", "tipo": "Ingreso", "monto": float(monto), "categoria": "Sueldo", "detalle": "Ingreso desde Negocio", "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}
+                ]).execute()
+                st.rerun()
+
+        elif opcion == "Registrar Gasto Personal" and rol_actual == "Admin":
+            monto = st.number_input("Monto ($)", min_value=0.0, step=50.0)
+            categoria = st.selectbox("Categoría", categorias_gasto_personal)
+            nota = st.text_input("Detalle:")
+            if st.button("Guardar Gasto Personal", type="primary"):
+                supabase.table("historial").insert({"fecha": datetime.now().strftime("%Y-%m-%d"), "cuenta": "Personal", "tipo": "Gasto", "monto": float(monto), "categoria": "Gasto Personal", "detalle": nota, "estado_pago": "Total", "metodo_pago": "Efectivo", "usuario_id": data_scope_id}).execute()
+                st.rerun()
 
 # --- 🧮 CALCULADORA DE COSTOS ---
 elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
-    st.title("🧮 Calculadora de Costos Completa")
-    costo_mat = st.number_input("Materiales ($):", min_value=0.0, step=100.0)
-    horas = st.number_input("Horas de trabajo:", min_value=0.0, value=1.0)
-    valor_hora = st.number_input("Valor Hora ($):", min_value=0.0, value=4000.0)
-    porcentaje = st.slider("Ganancia (%):", min_value=0, max_value=300, value=50)
+    st.title("🧮 Calculadora de Costos y Precio de Venta")
+    modo_cliente = st.toggle("👁️ Modo Vista Cliente (Ocultar Costos y Ganancias)", value=False)
     
-    costo_base = costo_mat + (horas * valor_hora)
-    precio_sug = costo_base * (1 + porcentaje/100)
-    st.metric("Precio de Venta Sugerido:", f"$ {precio_sug:,.2f}")
+    col_calc1, col_calc2 = st.columns([4, 3])
+    with col_calc1:
+        with st.container(border=True):
+            nombre_prod = st.text_input("Nombre del producto / trabajo:", placeholder="Ej: Remera Estampada DTF")
+            costo_materiales = st.number_input("Suma total de materiales usados ($):", min_value=0.0, value=0.0, step=100.0)
+            tiempo_horas = st.number_input("Tiempo estimado de trabajo (Horas):", min_value=0.0, value=0.5, step=0.25)
+            precio_hora_trabajo = st.number_input("Valor de tu hora de trabajo ($):", min_value=0.0, value=4000.0, step=500.0)
+            costo_mano_obra = tiempo_horas * precio_hora_trabajo
+            costo_fijos_prod = st.number_input("Costo de estructura fijo por producto ($):", min_value=0.0, value=500.0, step=100.0)
+            porcentaje_ganancia = st.slider("Porcentaje de ganancia deseado (%):", min_value=0, max_value=300, value=50, step=5)
+
+    costo_total_fabricacion = costo_materiales + costo_mano_obra + costo_fijos_prod
+    monto_ganancia_comercial = costo_total_fabricacion * (porcentaje_ganancia / 100.0)
+    precio_venta_sugerido = costo_total_fabricacion + monto_ganancia_comercial
+
+    with col_calc2:
+        with st.container(border=True):
+            st.markdown(f"<h1 style='text-align: center; color: #34D399; font-size: 50px;'>$ {precio_venta_sugerido:,.2f}</h1>", unsafe_allow_html=True)
+            if not modo_cliente:
+                st.write(f"📦 Materiales: $ {costo_materiales:,.2f} | 👤 Mano de Obra: $ {costo_mano_obra:,.2f}")
+                st.write(f"⚡ Costos Fijos: $ {costo_fijos_prod:,.2f} | 💰 Ganancia: $ {monto_ganancia_comercial:,.2f}")
 
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
-    st.title("📦 Control de Inventario Completo")
-    with st.expander("➕ Agregar Nuevo Insumo"):
-        nombre_i = st.text_input("Material:")
-        cant_i = st.number_input("Cantidad:", min_value=0, step=1)
-        if st.button("Registrar"):
-            supabase.table("stock").insert({"item": nombre_i, "cantidad": int(cant_i), "minimo": 5, "usuario_id": data_scope_id}).execute()
-            st.rerun()
-    if not df_stock.empty:
-        st.dataframe(df_stock[["item", "cantidad", "minimo"]])
+    st.title("📦 Control de Inventario Personalizado")
+    with st.expander("➕ Agregar Nuevo Insumo al Stock"):
+        col_i1, col_i2, col_i3 = st.columns(3)
+        nombre_i = col_i1.text_input("Nombre del material:")
+        cant_i = col_i2.number_input("Cantidad Inicial:", min_value=0, step=1)
+        minimo_i = col_i3.number_input("Stock Mínimo Alerta:", min_value=0, step=1)
+        if st.button("Registrar Insumo", type="primary"):
+            if nombre_i.strip():
+                supabase.table("stock").insert({"item": nombre_i.strip(), "cantidad": int(cant_i), "minimo": int(minimo_i), "usuario_id": data_scope_id}).execute()
+                st.rerun()
 
-# --- RESTO DE MÓDULOS DE RENDERIZADO ORIGINAL ---
+    st.markdown("---")
+    if df_stock.empty:
+        st.info("No tienes insumos cargados todavía.")
+    else:
+        for idx, row in df_stock.iterrows():
+            es_critico = int(row["cantidad"]) <= int(row["minimo"])
+            color_cartel = "🔴 Stock Crítico" if es_critico else "🟢 Stock Ok"
+            with st.container(border=True):
+                c_name, c_status, c_cant, c_actions, c_del = st.columns([3, 2, 2, 3, 1])
+                c_name.markdown(f"**{row['item']}**")
+                if es_critico: c_status.error(color_cartel)
+                else: c_status.success(color_cartel)
+                c_cant.markdown(f"Unidades: `{row['cantidad']}` (Mín: {row['minimo']})")
+                
+                btn_menos, btn_mas = c_actions.columns(2)
+                if btn_menos.button("➖ Usar 1", key=f"min_{row['id']}"):
+                    supabase.table("stock").update({"cantidad": max(0, int(row["cantidad"]) - 1)}).eq("id", int(row["id"])).execute()
+                    st.rerun()
+                if btn_mas.button("➕ Sumar 1", key=f"add_{row['id']}"):
+                    supabase.table("stock").update({"cantidad": int(row["cantidad"]) + 1}).eq("id", int(row["id"])).execute()
+                    st.rerun()
+                if c_del.button("🗑️", key=f"del_insumo_{row['id']}"):
+                    supabase.table("stock").delete().eq("id", int(row["id"])).execute()
+                    st.rerun()
+
+# --- 📉 PUNTO DE EQUILIBRIO ---
 elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
-    st.title("📉 Punto de Equilibrio")
-    st.info("Módulo operativo.")
+    st.title("📉 Análisis de Punto de Equilibrio")
+    with st.container(border=True):
+        costos_fijos = st.number_input("Costos fijos mensuales ($):", min_value=0.0, value=50000.0, step=1000.0)
+        precio_promedio = st.number_input("Precio de venta promedio ($):", min_value=1.0, value=2000.0)
+        costo_promedio = st.number_input("Costo de insumos promedio ($):", min_value=0.0, value=800.0)
+    margen = precio_promedio - costo_promedio
+    if margen > 0:
+        unidades = costos_fijos / margen
+        st.markdown("---")
+        res1, res2 = st.columns(2)
+        res1.metric("Unidades mensuales necesarias:", f"{int(unidades)} un.")
+        res2.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
 
+# --- 🎯 METAS DE AHORRO ---
 elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
-    st.title("🎯 Metas de Ahorro")
-    st.info("Módulo operativo.")
+    st.title("🎯 Alcancías Virtuales")
+    with st.expander("➕ Crear Nueva Meta de Ahorro"):
+        nombre_m = st.text_input("¿Para qué estás ahorrando?:")
+        monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
+        if st.button("Crear Meta", type="primary"):
+            if nombre_m.strip():
+                supabase.table("metas").insert({"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0, "usuario_id": data_scope_id}).execute()
+                st.rerun()
 
+# --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
 elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
-    st.title("⚙️ Configurar Categorías")
-    st.info("Módulo operativo.")
+    st.title("⚙️ Gestión Personalizada de Categorías")
+    with st.container(border=True):
+        tipo_nueva = st.selectbox("¿A qué módulo pertenece?", ["Ingreso", "Gasto Negocio", "Gasto Personal"])
+        nombre_nueva = st.text_input("Nombre de la categoría:")
+        if st.button("Guardar Nueva Categoría", type="primary"):
+            if nombre_nueva.strip():
+                supabase.table("categorias").insert({"tipo_categoria": tipo_nueva, "nombre_categoria": nombre_nueva.strip(), "usuario_id": data_scope_id}).execute()
+                st.rerun()
 
+# --- 📊 MI CIERRE DE CAJA ---
 elif seccion == "📊 Mi Cierre de Caja":
-    st.title("📊 Mi Cierre de Caja")
-    st.info("Módulo operativo.")
+    st.title("📊 Resumen del Día (Cierre de Caja)")
+    fecha_hoy_db = datetime.now().strftime("%Y-%m-%d")
+    st.markdown(f"### 📆 Movimientos del día de hoy")
+    
+    if df_historial.empty:
+        st.info("No se registran movimientos cargados hoy.")
+    else:
+        df_historial_hoy = df_historial.copy()
+        df_historial_hoy["fecha_txt"] = pd.to_datetime(df_historial_hoy["fecha"], errors='coerce').dt.strftime("%Y-%m-%d")
+        df_hoy = df_historial_hoy[df_historial_hoy["fecha_txt"] == fecha_hoy_db]
+        
+        if df_hoy.empty:
+            st.info("Todavía no se cargaron operaciones hoy.")
+        else:
+            hoy_efectivo = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Efectivo")]["monto"].sum()
+            hoy_mp = df_hoy[(df_hoy["tipo"] == "Ingreso") & (df_hoy["metodo_pago"] == "Mercado Pago")]["monto"].sum()
+            st.metric("Total Recaudado Hoy Efectivo:", f"$ {hoy_efectivo:,.2f}")
 
+# --- 👥 GESTIÓN DE PERSONAL ---
 elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
-    st.title("👥 Personal del Taller")
-    st.info("Módulo operativo.")
+    st.title("👥 Panel de Control de Colaboradores")
+    with st.container(border=True):
+        nombre_emp = st.text_input("Nombre del Empleado:").strip()
+        email_emp = st.text_input("Correo de Trabajo:").strip().lower()
+        pass_emp = st.text_input("Contraseña:", type="password")
+        if st.button("Registrar Colaborador", type="primary"):
+            if nombre_emp and email_emp and pass_emp:
+                hash_seguro_emp = encriptar_contrasena(pass_emp)
+                supabase.table("usuarios").insert({"nombre_taller": st.session_state.nombre_taller, "email": email_emp, "contrasena": hash_seguro_emp, "rol": "Empleado", "owner_id": u_id}).execute()
+                st.success("🎉 ¡Colaborador registrado!")
+                st.rerun()
