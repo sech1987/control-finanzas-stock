@@ -9,11 +9,10 @@ import google.generativeai as genai
 # --- CONFIGURACIÓN DE IA (GEMINI) ---
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 except Exception as e:
     st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
-st.set_page_config(layout="wide", page_title="Finanzas & Stock Manager Pro", page_icon="📈")
-
+    
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
 def init_supabase():
