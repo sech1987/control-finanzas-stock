@@ -491,13 +491,42 @@ elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
 # --- 🎯 METAS DE AHORRO ---
 elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
     st.title("🎯 Alcancías Virtuales")
-    with st.expander("➕ Crear Nueva Meta de Ahorro"):
+    with st.expander("➕ Crear Nueva Meta de Ahorro", expanded=True):
         nombre_m = st.text_input("¿Para qué estás ahorrando?:")
         monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
         if st.button("Crear Meta", type="primary"):
             if nombre_m.strip():
-                supabase.table("metas").insert({"meta": nombre_m.strip(), "objetivo": float(monto_m), "acumulado": 0.0, "usuario_id": data_scope_id}).execute()
-                st.rerun()
+                try:
+                    # Agregamos el data_scope_id que es obligatorio para Supabase
+                    supabase.table("metas").insert({
+                        "meta": nombre_m.strip(), 
+                        "objetivo": float(monto_m), 
+                        "acumulado": 0.0, 
+                        "usuario_id": data_scope_id
+                    }).execute()
+                    st.success("🎉 ¡Meta creada con éxito!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar en la base de datos: {e}")
+
+    st.markdown("---")
+    if df_metas.empty:
+        st.info("No tenés metas de ahorro creadas todavía.")
+    else:
+        st.subheader("📌 Tus Alcancías")
+        for idx, row in df_metas.iterrows():
+            with st.container(border=True):
+                col_m1, col_m2, col_m3 = st.columns([3, 3, 1])
+                obj = float(row['objetivo'])
+                acum = float(row.get('acumulado', 0.0))
+                
+                col_m1.markdown(f"🎯 **{row['meta']}**")
+                col_m1.progress(min(1.0, acum / obj) if obj > 0 else 0.0)
+                col_m2.markdown(f"💰 Acumulado: **$ {acum:,.2f}** de **$ {obj:,.2f}**")
+                
+                if col_m3.button("🗑️", key=f"del_meta_{row['id']}"):
+                    supabase.table("metas").delete().eq("id", int(row["id"])).execute()
+                    st.rerun()
 
 # --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
 elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
