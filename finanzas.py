@@ -555,27 +555,12 @@ elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
         res2.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
 
 # --- 🎯 METAS DE AHORRO ---
-elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
-    st.title("🎯 Alcancías Virtuales")
-    with st.expander("➕ Crear Nueva Meta de Ahorro", expanded=True):
-        nombre_m = st.text_input("¿Para qué estás ahorrando?:")
-        monto_m = st.number_input("Monto Meta Necesario ($):", min_value=1.0, step=1000.0)
-        if st.button("Crear Meta", type="primary"):
-            if nombre_m.strip():
-                try:
-                    # Agregamos el data_scope_id que es obligatorio para Supabase
-                    supabase.table("metas").insert({
-                        "meta": nombre_m.strip(), 
-                        "objetivo": float(monto_m), 
-                        "acumulado": 0.0, 
-                        "usuario_id": data_scope_id
-                    }).execute()
-                    st.success("🎉 ¡Meta creada con éxito!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al guardar en la base de datos: {e}")
+elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
+    st.title("🎯 Metas de Ahorro y Alcancías")
+    
+    # ... acá va la lógica que carga el df_metas ...
 
-   st.markdown("---")
+    st.markdown("---") # <-- ESTA LÍNEA (578) TIENE QUE TENER LA MISMA INDENTACIÓN QUE EL ST.TITLE
     if df_metas.empty:
         st.info("No tenés metas de ahorro creadas todavía.")
     else:
@@ -585,20 +570,16 @@ elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
                 obj = float(row['objetivo'])
                 acum = float(row.get('acumulado', 0.0))
                 
-                # Calculamos el porcentaje real de ahorro
                 porcentaje = (acum / obj) * 100 if obj > 0 else 0.0
                 
-                # Diseño en columnas ordenadas
                 col_m1, col_m2, col_m3 = st.columns([4, 3, 2])
                 
                 col_m1.markdown(f"🎯 **{row['meta']}**")
-                # Mostramos la barra de progreso junto al porcentaje numérico para que sea ultra visual
                 col_m1.progress(min(1.0, acum / obj) if obj > 0 else 0.0)
                 col_m1.caption(f"📈 Progreso: **{porcentaje:.1f}%** completado")
                 
                 col_m2.markdown(f"💰 **$ {acum:,.2f}** / $ {obj:,.2f}")
                 
-                # Formulario rápido para meter plata en la alcancía
                 with col_m3:
                     monto_ahorrar = st.number_input("Sumar ($):", min_value=0.0, step=500.0, key=f"add_m_{row['id']}")
                     if st.button("💾", key=f"btn_save_m_{row['id']}", help="Guardar ahorro"):
@@ -608,11 +589,10 @@ elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
                             st.success("¡Ahorro guardado!")
                             st.rerun()
                     
-                    # Botón de eliminar chico abajo
                     if st.button("🗑️", key=f"del_meta_{row['id']}"):
                         supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                         st.rerun()
-
+                        
 # --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
 elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
     st.title("⚙️ Gestión Personalizada de Categorías")
