@@ -6,12 +6,16 @@ from supabase import create_client, Client
 import io
 import google.generativeai as genai
 
+# --- CONFIGURACIÓN DE IA (CAPA GRATUITA DEFINITIVA - V1 ESTABLE) ---
 import google.generativeai as genai
 
 try:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Usamos el modelo con su nomenclatura de producción para congelarlo en la capa gratis
-    model = genai.GenerativeModel(model_name='gemini-1.5-flash-8b')
+    # Forzamos al sistema a usar la API de producción 'v1' en lugar de la 'v1beta'
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"], client_options={"api_version": "v1"})
+    
+    # Usamos el modelo estándar que en la v1 es completamente gratuito y sin prepagos
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
 except Exception as e:
     st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
     
