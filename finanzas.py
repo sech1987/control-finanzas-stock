@@ -13,7 +13,7 @@ def consultar_gemini_directo(prompt_texto):
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
         # Le pegamos directo a la autopista v1 de producción sin pasar por librerías intermedias
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+       url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
         headers = {"Content-Type": "application/json"}
         payload = {
