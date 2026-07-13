@@ -581,14 +581,30 @@ elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
                 col_m2.markdown(f"💰 **$ {acum:,.2f}** / $ {obj:,.2f}")
                 
                 with col_m3:
-                    monto_ahorrar = st.number_input("Sumar ($):", min_value=0.0, step=500.0, key=f"add_m_{row['id']}")
-                    if st.button("💾", key=f"btn_save_m_{row['id']}", help="Guardar ahorro"):
-                        if monto_ahorrar > 0:
-                            nuevo_acumulado = acum + monto_ahorrar
-                            supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
-                            st.success("¡Ahorro guardado!")
-                            st.rerun()
+                    # Permitimos valores negativos cambiando el min_value a None
+                    monto_ahorrar = st.number_input(
+                        "Sumar/Restar ($):", 
+                        value=0.0, 
+                        step=500.0, 
+                        key=f"add_m_{row['id']}"
+                    )
                     
+                    if st.button("💾", key=f"btn_save_m_{row['id']}", help="Guardar movimiento"):
+                        if monto_ahorrar != 0:
+                            nuevo_acumulado = acum + monto_ahorrar
+                            
+                            # Evitamos que la alcancía quede en negativo por error
+                            if nuevo_acumulado < 0:
+                                st.error("⚠️ No podés retirar más plata de la que tenés ahorrada.")
+                            else:
+                                supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
+                                if monto_ahorrar > 0:
+                                    st.success(f"¡Sumaste $ {monto_ahorrar:,.2f}!")
+                                else:
+                                    st.warning(f"¡Retiraste $ {abs(monto_ahorrar):,.2f} por urgencia!")
+                                st.rerun()
+                    
+                    # Botón de eliminar chico abajo
                     if st.button("🗑️", key=f"del_meta_{row['id']}"):
                         supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                         st.rerun()
