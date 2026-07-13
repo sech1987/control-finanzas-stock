@@ -6,25 +6,33 @@ from supabase import create_client, Client
 import io
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE IA (CAPA GRATUITA DEFINITIVA - CLIENTE DIRECTO) ---
-import google.generativeai as genai
-from google.api_core import client_options
+# --- CONFIGURACIÓN DE IA (CONEXIÓN DIRECTA POR API - CAPA GRATUITA) ---
+import requests
 
-try:
-    # Configuramos la clave de forma simple para que no tire error de parámetros
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    
-    # Creamos las opciones para forzar la API v1 de producción
-    opciones_api = client_options.ClientOptions(api_version="v1")
-    
-    # Le pasamos las opciones directo al modelo al crearlo
-    model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
-        client_options=opciones_api
-    )
-except Exception as e:
-    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
-    
+def consultar_gemini_directo(prompt_texto):
+    try:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        # Le pegamos directo a la autopista v1 de producción sin pasar por librerías intermedias
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+        
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt_texto}]
+            }]
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        data = response.json()
+        
+        # Extraemos la respuesta de la estructura nativa de Google
+        if "candidates" in data and len(data["candidates"]) > 0:
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        elif "error" in data:
+            return f"⚠️ Error de la API de Google: {data['error'].get('message', 'Desconocido')}"
+        return "⚠️ No se recibió una respuesta clara del servidor. Intentá de nuevo."
+    except Exception as e:
+        return f"⚠️ Error de conexión con el módulo de IA. (Detalle: {e})"
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
 def init_supabase():
