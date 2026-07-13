@@ -234,11 +234,10 @@ with st.sidebar:
 if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
     st.title("💼 Panel de Control General")
     
-    if caja_negocio < 0:
-        st.error("⚠️ **Alerta Financiera:** La caja del taller registra un saldo desfavorable (en rojo).")
-    if billetera_personal < 0:
-        st.warning("⚠️ **Alerta Personal:** Tus finanzas individuales están en rojo.")
-
+    if rol_actual == "Admin":
+    # Muestra Fondos del Emprendimiento y Finanzas Personales...
+else:
+    st.warning("Acceso restringido. Esta sección es exclusiva para el Administrador.")
     col1, col2 = st.columns(2)
     with col1:
         with st.container(border=True):
@@ -354,7 +353,12 @@ elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
-    opciones_carga = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio"] if rol_actual == "Empleado" else ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"]
+     # Filtro seguro por Rol
+if rol_actual == "Admin":
+    opciones = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio", "Retirar Sueldo", "Registrar Gasto Personal"]
+else:
+    # El empleado solo registra ventas u operaciones del taller cotidianas
+    opciones = ["Registrar Venta / Presupuesto", "Registrar Gasto Negocio"]
     opcion = st.selectbox("¿Qué vas a registrar hoy?", opciones_carga)
     
     with st.container(border=True):
