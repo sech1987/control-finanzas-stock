@@ -559,6 +559,16 @@ elif seccion == "🎯 Metas de Ahorro":
     st.title("🎯 Metas de Ahorro y Alcancías")
     st.markdown("Definí objetivos claros para equipamiento, insumos grandes o fondos de emergencia.")
     
+    # 🔍 LEEMOS LAS METAS DIRECTAMENTE DE SUPABASE EN TIEMPO REAL
+    try:
+        respuesta_metas = supabase.table("metas").select("*").execute()
+        # Convertimos la respuesta de Supabase a un DataFrame de Pandas
+        import pandas as pd
+        df_metas = pd.DataFrame(respuesta_metas.data) if respuesta_metas.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error al conectar con la base de datos de metas: {e}")
+        df_metas = pd.DataFrame() # Creamos un df vacío como plan de emergencia si falla la conexión
+    
     # --- FORMULARIO PARA CREAR NUEVA META (CORREGIDO Y SEGURO) ---
     with st.container(border=True):
         st.subheader("🆕 Crear Nueva Alcancía")
