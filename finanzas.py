@@ -618,24 +618,21 @@ elif seccion == "🎯 Metas de Ahorro":
                     )
                     
                     if st.button("💾", key=f"btn_save_m_{row['id']}", help="Guardar movimiento"):
-                        if monto_ahorrar != 0:
-                            nuevo_acumulado = acum + monto_ahorrar
-                            
-                            # Evitamos saldo negativo por seguridad
-                            if nuevo_acumulado < 0:
-                                st.error("⚠️ No podés retirar más plata de la que tenés ahorrada.")
-                            else:
-                                supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
-                                if monto_ahorrar > 0:
-                                    st.success(f"¡Sumaste $ {monto_ahorrar:,.2f}!")
-                                else:
-                                    st.warning(f"¡Retiraste $ {abs(monto_ahorrar):,.2f} por urgencia!")
-                                st.rerun()
-                    
-                    # Botón de eliminar
-                    if st.button("🗑️", key=f"del_meta_{row['id']}"):
-                        supabase.table("metas").delete().eq("id", int(row["id"])).execute()
+                        if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
+                if nueva_meta_nombre:
+                    try:
+                        # Guardamos en Supabase sin el campo 'taller' que no existe en tu tabla
+                        supabase.table("metas").insert({
+                            "meta": nueva_meta_nombre,
+                            "objetivo": objetivo_monto,
+                            "acumulado": 0.0
+                        }).execute()
+                        st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al guardar la meta: {e}")
+                else:
+                    st.warning("Por favor, ingresá un nombre para tu meta de ahorro.")
                         
 # --- ⚙️ CONFIGURACIÓN DE CATEGORÍAS ---
 elif seccion == "⚙️ Configurar Categorías" and rol_actual == "Admin":
