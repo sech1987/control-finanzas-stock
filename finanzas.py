@@ -6,12 +6,29 @@ from supabase import create_client, Client
 import io
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE IA (GEMINI) ---
-try:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    model = genai.GenerativeModel('gemini-2.0-flash')
-except Exception as e:
-    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
+import requests
+
+def consultar_llama_gratis(prompt_texto):
+    try:
+        API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+        headers = {"Authorization": f"Bearer {st.secrets['HF_API_KEY']}"}
+        payload = {
+            "inputs": f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nSos un consultor financiero experto en talleres gráficos de Argentina. Hablás en español rioplatense, de forma directa, corporativa pero cercana.<|eot_id|><|start_header_id|>user<|end_header_id|>\n{prompt_texto}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n",
+            "parameters": {"max_new_tokens": 700, "temperature": 0.7}
+        }
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=20)
+        resultado = response.json()
+        
+        # Hugging Face a veces devuelve una lista o un diccionario según el formato
+        if isinstance(resultado, list) and len(resultado) > 0:
+            texto_completo = resultado[0].get('generated_text', '')
+            # Limpiamos el prompt para dejar solo la respuesta de la IA
+            if "<|start_header_id|>assistant<|end_header_id|>\n" in texto_completo:
+                return texto_completo.split("<|start_header_id|>assistant<|end_header_id|>\n")[-1].strip()
+            return texto_completo
+        return "⚠️ La IA está procesando otros datos, por favor intentá de nuevo en unos segundos."
+    except Exception as e:
+        return f"⚠️ Nota: El servidor gratuito está saturado. Reintentá en un instante. (Detalle: {e})"
     
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
@@ -310,15 +327,14 @@ elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
 
     if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
-            try:
-                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-                resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos}\nHistorial:\n{historial_texto}"
-                prompt_expert = f"Actúa como consultor financiero estratégico para talleres gráficos y de personalización. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense (Argentina), de forma directa, corporativa pero cercana."
-                response = model.generate_content(prompt_expert)
-                st.markdown("<br><hr>", unsafe_allow_html=True)
-                st.markdown(response.text)
-            except Exception as e:
-                st.error(f"❌ No se pudo conectar con el modelo de IA: {e}")
+            historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
+            resumen_data = f"Nombre del Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nInsumos Críticos: {items_criticos}\nÚltimos Movimientos:\n{historial_texto}"
+            
+            prompt_expert = f"Analizá los siguientes datos financieros del taller y devolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave:\n\n{resumen_data}"
+            
+            respuesta_ia = consultar_llama_gratis(prompt_expert)
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(respuesta_ia)
 
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
