@@ -300,6 +300,10 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
 if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
             try:
+                # Traemos los insumos con bajo stock para definir la variable
+                insumos_bajos = df_stock[df_stock['cantidad'] <= df_stock['stock_minimo']] if not df_stock.empty else []
+                items_criticos = ", ".join(insumos_bajos['insumo'].tolist()) if not df_stock.empty and not insumos_bajos.empty else "Ninguno"
+                
                 historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
                 resumen_data = f"Nombre del Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nInsumos Críticos: {items_criticos}\nÚltimos Movimientos:\n{historial_texto}"
                 
