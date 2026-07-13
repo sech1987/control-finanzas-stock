@@ -6,13 +6,12 @@ from supabase import create_client, Client
 import io
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE IA (GEMINI FREE TIER) ---
 import google.generativeai as genai
 
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Usamos la versión flash estable que tiene la capa gratuita más amplia
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Usamos el identificador limpio que pide la API actual
+    model = genai.GenerativeModel('gemini-2.0-flash')
 except Exception as e:
     st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
     
