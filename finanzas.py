@@ -6,29 +6,15 @@ from supabase import create_client, Client
 import io
 import google.generativeai as genai
 
-import requests
+# --- CONFIGURACIÓN DE IA (GEMINI FREE TIER) ---
+import google.generativeai as genai
 
-def consultar_llama_gratis(prompt_texto):
-    try:
-        API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
-        headers = {"Authorization": f"Bearer {st.secrets['HF_API_KEY']}"}
-        payload = {
-            "inputs": f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\nSos un consultor financiero experto en talleres gráficos de Argentina. Hablás en español rioplatense, de forma directa, corporativa pero cercana.<|eot_id|><|start_header_id|>user<|end_header_id|>\n{prompt_texto}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n",
-            "parameters": {"max_new_tokens": 700, "temperature": 0.7}
-        }
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=20)
-        resultado = response.json()
-        
-        # Hugging Face a veces devuelve una lista o un diccionario según el formato
-        if isinstance(resultado, list) and len(resultado) > 0:
-            texto_completo = resultado[0].get('generated_text', '')
-            # Limpiamos el prompt para dejar solo la respuesta de la IA
-            if "<|start_header_id|>assistant<|end_header_id|>\n" in texto_completo:
-                return texto_completo.split("<|start_header_id|>assistant<|end_header_id|>\n")[-1].strip()
-            return texto_completo
-        return "⚠️ La IA está procesando otros datos, por favor intentá de nuevo en unos segundos."
-    except Exception as e:
-        return f"⚠️ Nota: El servidor gratuito está saturado. Reintentá en un instante. (Detalle: {e})"
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    # Usamos la versión flash estable que tiene la capa gratuita más amplia
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
     
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
@@ -311,31 +297,20 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                         st.rerun()
 
 # --- 🤖 MÓDULO CONSULTOR IA ---
-elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
-    st.title("🤖 Consultor Financiero IA Inteligente")
-    st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización, fugas de dinero y estrategias de precios.")
-    
-    with st.container(border=True):
-        st.subheader("📊 Resumen Enviado al Consultor")
-        st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
-        st.write(f"💰 **Caja del Negocio:** $ {caja_negocio:,.2f}")
-        st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
-        items_criticos = []
-        if not df_stock.empty:
-            items_criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]["item"].tolist()
-        st.write(f"📦 **Insumos Críticos a Reponer:** {', '.join(items_criticos) if items_criticos else 'Ninguno (Stock Ok)'}")
-
-    if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
+if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
-            historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-            resumen_data = f"Nombre del Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nInsumos Críticos: {items_criticos}\nÚltimos Movimientos:\n{historial_texto}"
-            
-            prompt_expert = f"Analizá los siguientes datos financieros del taller y devolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave:\n\n{resumen_data}"
-            
-            respuesta_ia = consultar_llama_gratis(prompt_expert)
-            st.markdown("<br><hr>", unsafe_allow_html=True)
-            st.markdown(respuesta_ia)
-
+            try:
+                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
+                resumen_data = f"Nombre del Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nInsumos Críticos: {items_criticos}\nÚltimos Movimientos:\n{historial_texto}"
+                
+                prompt_expert = f"Sos un consultor financiero experto en talleres gráficos de Argentina. Hablás en español rioplatense, de forma directa y cercana. Analizá los siguientes datos financieros del taller y devolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave:\n\n{resumen_data}"
+                
+                # Llamada nativa a Gemini
+                response = model.generate_content(prompt_expert)
+                st.markdown("<br><hr>", unsafe_allow_html=True)
+                st.markdown(response.text)
+            except Exception as e:
+                st.error(f"⚠️ El servidor de IA está recibiendo muchas consultas. Por favor, intentá de nuevo en unos segundos. (Detalle: {e})")
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
