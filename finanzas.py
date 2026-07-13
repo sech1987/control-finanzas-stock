@@ -465,26 +465,41 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             if not modo_cliente:
                 st.write(f"📦 Materiales: $ {costo_materiales:,.2f} | 👤 Mano de Obra: $ {costo_mano_obra:,.2f}")
                 st.write(f"⚡ Costos Fijos: $ {costo_fijos_prod:,.2f} | 💰 Ganancia: $ {monto_ganancia_comercial:,.2f}")
- # --- 📝 PLANTILLA DE PRESUPUESTO PARA EL CLIENTE (CORREGIDA) ---
+                
+# --- 📝 PLANTILLA DE PRESUPUESTO PARA EL CLIENTE (BLINDADA) ---
         st.markdown("---")
         st.subheader("📝 Presupuesto Listo para Enviar")
         st.markdown("Copiá este texto y mandaselo directo a tu cliente por WhatsApp o mensaje:")
         
-        # Buscamos el nombre de forma segura de las variables existentes
-        nombre_trabajo = producto if 'producto' in locals() else (descripcion if 'descripcion' in locals() else "Trabajo Personalizado")
+        # 1. Buscamos el nombre del trabajo de forma segura
+        nombre_trabajo = "Trabajo Personalizado"
+        for var_name in ['producto', 'descripcion', 'nombre_trabajo', 'item_name']:
+            if var_name in locals():
+                nombre_trabajo = locals()[var_name]
+                break
+        
+        # 2. Buscamos el precio calculado de forma segura entre las variables comunes
+        precio_final = 0.0
+        for var_name in ['precio_sugerido', 'precio_final', 'precio_venta', 'total_sugerido', 'precio_sug', 'precio']:
+            if var_name in locals():
+                try:
+                    precio_final = float(locals()[var_name])
+                    break
+                except:
+                    continue
         
         # Armamos el texto de forma limpia y profesional
         texto_presupuesto = (
             f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{nombre_trabajo}*\n\n"
             f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
-            f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
+            f"💰 *Valor Total:* $ {precio_final:,.2f}\n\n"
             f"⚠️ *Condiciones:* Válido por 5 días debido a la reposición de insumos. "
             f"Se inicia el trabajo con una seña del 50%.\n\n"
             f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
         )
         
         # Lo mostramos en un cuadro de texto especial que permite copiar con un solo clic
-        st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=180, key="txt_presupuesto_cliente")       
+        st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=180, key="txt_presupuesto_cliente")
 
 # --- 📦 STOCK DE INSUMOS ---
 elif seccion == "📦 Stock de Insumos":
