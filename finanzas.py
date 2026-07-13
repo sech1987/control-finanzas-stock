@@ -10,8 +10,8 @@ import google.generativeai as genai
 
 try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-    # Usamos el identificador limpio que pide la API actual
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    # Usamos el modelo con su nomenclatura de producción para congelarlo en la capa gratis
+    model = genai.GenerativeModel(model_name='gemini-1.5-flash-8b')
 except Exception as e:
     st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
     
