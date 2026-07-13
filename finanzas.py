@@ -297,24 +297,50 @@ if seccion == "🏠 Dashboard General" and rol_actual == "Admin":
                         st.rerun()
 
 # --- 🤖 MÓDULO CONSULTOR IA ---
-if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
+elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
+    st.title("🤖 Consultor Financiero IA Inteligente")
+    st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización, fugas de dinero y estrategias de precios.")
+    
+    # --- CUADRO DE DETALLES DE LA CUENTA (RESTAURADO) ---
+    items_criticos_lista = []
+    if not df_stock.empty:
+        # Usamos los nombres correctos de tus columnas: cantidad y minimo
+        criticos_df = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
+        if not criticos_df.empty:
+            items_criticos_lista = criticos_df["item"].tolist()
+            
+    items_criticos_txt = ", ".join(items_criticos_lista) if items_criticos_lista else "Ninguno (Stock Ok)"
+
+    with st.container(border=True):
+        st.subheader("📊 Resumen Enviado al Consultor")
+        st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
+        st.write(f" Louie 🛠️ **Fondos en Caja:** $ {caja_negocio:,.2f}")
+        st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
+        st.write(f"📦 **Insumos Críticos a Reponer:** {items_criticos_txt}")
+
+    # --- BOTÓN DE GENERACIÓN CON FILTRO DE ERROR ---
+    if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
             try:
-                # Traemos los insumos con bajo stock para definir la variable
-                insumos_bajos = df_stock[df_stock['cantidad'] <= df_stock['stock_minimo']] if not df_stock.empty else []
-                items_criticos = ", ".join(insumos_bajos['insumo'].tolist()) if not df_stock.empty and not insumos_bajos.empty else "Ninguno"
-                
                 historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-                resumen_data = f"Nombre del Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nInsumos Críticos: {items_criticos}\nÚltimos Movimientos:\n{historial_texto}"
+                resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos_txt}\nHistorial:\n{historial_texto}"
                 
-                prompt_expert = f"Sos un consultor financiero experto en talleres gráficos de Argentina. Hablás en español rioplatense, de forma directa y cercana. Analizá los siguientes datos financieros del taller y devolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave:\n\n{resumen_data}"
+                prompt_expert = f"Actúa como consultor financiero estratégico para talleres gráficos y de personalización. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense (Argentina), de forma directa, corporativa pero cercana."
                 
-                # Llamada nativa a Gemini
+                # Forzamos a la librería a buscar la ruta correcta del modelo estable
                 response = model.generate_content(prompt_expert)
                 st.markdown("<br><hr>", unsafe_allow_html=True)
                 st.markdown(response.text)
             except Exception as e:
-                st.error(f"⚠️ El servidor de IA está recibiendo muchas consultas. Por favor, intentá de nuevo en unos segundos. (Detalle: {e})")
+                # Si falla el 1.5 por la versión de API, le tiramos un plan B rápido al código intentando cambiar la ruta del string
+                try:
+                    import google.generativeai as genai
+                    model_backup = genai.GenerativeModel('gemini-1.5-flash-latest')
+                    response = model_backup.generate_content(prompt_expert)
+                    st.markdown("<br><hr>", unsafe_allow_html=True)
+                    st.markdown(response.text)
+                except Exception as e2:
+                    st.error(f"⚠️ El servidor de IA está recibiendo muchas consultas. Por favor, intentá de nuevo en unos segundos. (Detalle: {e2})")
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
