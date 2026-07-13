@@ -12,27 +12,33 @@ import requests
 def consultar_gemini_directo(prompt_texto):
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
-        # Le pegamos directo a la autopista v1 de producción sin pasar por librerías intermedias
-       url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+        # Intento Principal con el último Flash Estable
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
         
         headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt_texto}]
-            }]
-        }
+        payload = {"contents": [{"parts": [{"text": prompt_texto}]}]}
         
         response = requests.post(url, headers=headers, json=payload, timeout=20)
         data = response.json()
         
-        # Extraemos la respuesta de la estructura nativa de Google
         if "candidates" in data and len(data["candidates"]) > 0:
             return data["candidates"][0]["content"]["parts"][0]["text"]
-        elif "error" in data:
-            return f"⚠️ Error de la API de Google: {data['error'].get('message', 'Desconocido')}"
+            
+        # --- PLAN B AUTOMÁTICO EN CASO DE 404 ---
+        # Si da error de modelo no encontrado, intentamos con Gemini 1.5 Pro automáticamente
+        url_pro = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
+        response_pro = requests.post(url_pro, headers=headers, json=payload, timeout=20)
+        data_pro = response_pro.json()
+        
+        if "candidates" in data_pro and len(data_pro["candidates"]) > 0:
+            return data_pro["candidates"][0]["content"]["parts"][0]["text"]
+        elif "error" in data_pro:
+            return f"⚠️ Error de la API de Google: {data_pro['error'].get('message', 'Desconocido')}"
+            
         return "⚠️ No se recibió una respuesta clara del servidor. Intentá de nuevo."
     except Exception as e:
         return f"⚠️ Error de conexión con el módulo de IA. (Detalle: {e})"
+        
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
 def init_supabase():
