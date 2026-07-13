@@ -494,7 +494,7 @@ elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
             f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
             f"💰 *Valor Total:* $ {precio_final:,.2f}\n\n"
             f"⚠️ *Condiciones:* Válido por 5 días debido a la reposición de insumos. "
-            f"Se inicia el trabajo con una seña del 50%.\n\n"
+            f"Se inicia el trabajo con el pago del 100%.\n\n"
             f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
         )
         
