@@ -335,19 +335,16 @@ elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
 
     if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
         with st.spinner("🤖 Analizando base de datos en tiempo real..."):
-            try:
-                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-                resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos_txt}\nHistorial:\n{historial_texto}"
-                
-                prompt_expert = f"Actúa como consultor financiero estratégico para un taller gráfico y de personalización en Argentina. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense, de forma directa, corporativa pero cercana."
-                
-                # Ejecución directa con el modelo configurado arriba
-                response = model.generate_content(prompt_expert)
-                st.markdown("<br><hr>", unsafe_allow_html=True)
-                st.markdown(response.text)
-            except Exception as e:
-                st.error(f"⚠️ El servidor de IA está recibiendo muchas consultas o tu cuota diaria está al límite. Por favor, intentá de nuevo en unos minutos. (Detalle: {e})")
-                
+            historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
+            resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos_txt}\nHistorial:\n{historial_texto}"
+            
+            prompt_expert = f"Actúa como consultor financiero estratégico para un taller gráfico y de personalización en Argentina. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense (Argentina), de forma directa, corporativa pero cercana."
+            
+            # Llamada directa pasando por encima de la librería rota
+            respuesta_ia = consultar_gemini_directo(prompt_expert)
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            st.markdown(respuesta_ia)
+            
 # --- 📝 NUEVA OPERACIÓN ---
 elif seccion == "📝 Nueva Operación":
     st.title("📝 Carga de Movimientos")
