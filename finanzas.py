@@ -554,13 +554,39 @@ elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
         res1.metric("Unidades mensuales necesarias:", f"{int(unidades)} un.")
         res2.metric("Facturación mínima requerida:", f"${unidades * precio_promedio:,.2f}")
 
-# --- 🎯 METAS DE AHORRO ---
-elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
+# --- 🎯 SECCIÓN METAS DE AHORRO ---
+elif seccion == "🎯 Metas de Ahorro":
     st.title("🎯 Metas de Ahorro y Alcancías")
+    st.markdown("Definí objetivos claros para equipamiento, insumos grandes o fondos de emergencia.")
     
-    # ... acá va la lógica que carga el df_metas ...
+    # --- FORMULARIO PARA CREAR NUEVA META (RESTAURADO) ---
+    with st.container(border=True):
+        st.subheader("🆕 Crear Nueva Alcancía")
+        with st.form("form_nueva_meta", clear_on_submit=True):
+            col_f1, col_f2 = st.columns(2)
+            nueva_meta_nombre = col_f1.text_input("¿Para qué estás ahorrando? (Ej: Guillotina nueva)", placeholder="Nombre de la meta")
+            objetivo_monto = col_f2.number_input("Monto Objetivo ($)", min_value=1.0, step=1000.0)
+            
+            if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
+                if nueva_meta_nombre:
+                    try:
+                        # Guardamos en la base de datos de Supabase
+                        supabase.table("metas").insert({
+                            "meta": nueva_meta_nombre,
+                            "objetivo": objetivo_monto,
+                            "acumulado": 0.0,
+                            "taller": st.session_state.nombre_taller
+                        }).execute()
+                        st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al guardar la meta: {e}")
+                else:
+                    st.warning("Por favor, ingresá un nombre para tu meta de ahorro.")
 
-    st.markdown("---") # <-- ESTA LÍNEA (578) TIENE QUE TENER LA MISMA INDENTACIÓN QUE EL ST.TITLE
+    st.markdown("---")
+    
+    # --- LISTA DE ALCANCÍAS EXISTENTES ---
     if df_metas.empty:
         st.info("No tenés metas de ahorro creadas todavía.")
     else:
@@ -570,8 +596,10 @@ elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
                 obj = float(row['objetivo'])
                 acum = float(row.get('acumulado', 0.0))
                 
+                # Calculamos el porcentaje real de ahorro
                 porcentaje = (acum / obj) * 100 if obj > 0 else 0.0
                 
+                # Diseño en columnas ordenadas
                 col_m1, col_m2, col_m3 = st.columns([4, 3, 2])
                 
                 col_m1.markdown(f"🎯 **{row['meta']}**")
@@ -580,8 +608,8 @@ elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
                 
                 col_m2.markdown(f"💰 **$ {acum:,.2f}** / $ {obj:,.2f}")
                 
+                # Formulario para meter o sacar plata en la alcancía
                 with col_m3:
-                    # Permitimos valores negativos cambiando el min_value a None
                     monto_ahorrar = st.number_input(
                         "Sumar/Restar ($):", 
                         value=0.0, 
@@ -593,7 +621,7 @@ elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
                         if monto_ahorrar != 0:
                             nuevo_acumulado = acum + monto_ahorrar
                             
-                            # Evitamos que la alcancía quede en negativo por error
+                            # Evitamos saldo negativo por seguridad
                             if nuevo_acumulado < 0:
                                 st.error("⚠️ No podés retirar más plata de la que tenés ahorrada.")
                             else:
@@ -604,7 +632,7 @@ elif seccion == "🎯 Metas de Ahorro": # O el nombre exacto de tu sección
                                     st.warning(f"¡Retiraste $ {abs(monto_ahorrar):,.2f} por urgencia!")
                                 st.rerun()
                     
-                    # Botón de eliminar chico abajo
+                    # Botón de eliminar
                     if st.button("🗑️", key=f"del_meta_{row['id']}"):
                         supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                         st.rerun()
