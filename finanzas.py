@@ -25,9 +25,6 @@ try:
 except Exception as e:
     st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
     
-except Exception as e:
-    st.warning("⚠️ Nota: Falta configurar la GOOGLE_API_KEY en tus secretos de Streamlit Cloud.")
-    
 # --- CONEXIÓN A SUPABASE ---
 @st.cache_resource
 def init_supabase():
