@@ -126,7 +126,7 @@ if not st.session_state.get("autenticado", False):
                         
                         if res_user.data:
                             user_data = res_user.data[0]
-                            # Verificación simple de contraseña
+                            # Verificación de contraseña
                             if user_data["password"] == password_input:
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_email = user_data["email"]
@@ -443,7 +443,7 @@ else:
             st.subheader("📌 Tus Alcancías")
             for idx, row in df_metas.iterrows():
                 with st.container(border=True):
-                    obj = float(row['objetivo'])
+                    obj = float(row['objective'] if 'objective' in row else row['objetivo'])
                     acum = float(row.get('acumulado', 0.0))
                     
                     # Calculamos el porcentaje real de ahorro
