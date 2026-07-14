@@ -72,150 +72,109 @@ def consultar_gemini_directo(prompt_texto):
     except Exception as e:
         return f"⚠️ Error de conexión con el módulo de IA. (Detalle: {e})"
 
-# --- CARGAR DATOS DESDE SUPABASE ---
-@st.cache_data(ttl=5)
-def cargar_datos():
-    try:
-        # Traer Historial de operaciones
-        res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
-        datos_historial = extraer_datos_respuesta(res_historial)
-        df_historial = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
-        if not df_historial.empty:
-            df_historial["fecha"] = pd.to_datetime(df_historial["fecha"])
-            df_historial["monto"] = df_historial["monto"].astype(float)
-            
-        # Traer Stock
-        res_stock = supabase.table("stock").select("*").execute()
-        datos_stock = extraer_datos_respuesta(res_stock)
-        df_stock = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
-        
-        if not df_stock.empty:
-            df_stock["cantidad"] = df_stock["cantidad"].astype(float) if "cantidad" in df_stock.columns else 0.0
-            df_stock["minimo"] = df_stock["minimo"].astype(float) if "minimo" in df_stock.columns else 0.0
-            
-            # Búsqueda segura de precio_costo o nombres alternativos
-            col_precio = None
-            for c in ["precio_costo", "precio", "costo", "valor_costo"]:
-                if c in df_stock.columns:
-                    col_precio = c
-                    break
-            if col_precio:
-                df_stock["precio_costo"] = df_stock[col_precio].astype(float)
-            else:
-                df_stock["precio_costo"] = 0.0
-            
-        return df_historial, df_stock
-    except Exception as e:
-        st.error(f"Error al sincronizar inventario/historial (Sigue funcionando igual): {e}")
-        return pd.DataFrame(), pd.DataFrame()
-
-df_historial, df_stock = cargar_datos()
-
-# --- CÁLCULO DE CAJAS ---
-caja_negocio = 0.0
-billetera_personal = 0.0
-
-if not df_historial.empty:
-    # Ingresos y Gastos del Negocio
-    ingresos = df_historial[(df_historial["tipo"] == "Ingreso")]["monto"].sum()
-    gastos_negocio = df_historial[(df_historial["tipo"] == "Gasto Negocio")]["monto"].sum()
-    
-    # Retiros y Gastos Personales
-    retiros_personales = df_historial[(df_historial["tipo"] == "Retiro Sueldo")]["monto"].sum()
-    gastos_personales = df_historial[(df_historial["tipo"] == "Gasto Personal")]["monto"].sum()
-    
-    # Saldos
-    caja_negocio = ingresos - gastos_negocio - retiros_personales
-    billetera_personal = retiros_personales - gastos_personales
 
 # ==========================================
-# 🔐 PANTALLA DE INICIO DE SESIÓN (LOGIN)
+# 🔐 PANTALLA DE INICIO DE SESIÓN (LOGIN) - LIMPIA COMO EL VIDEO
 # ==========================================
 if not st.session_state.get("autenticado", False):
     st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>💼 Finanzas & Stock Manager Pro</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Ingresá tus credenciales para acceder al sistema de gestión de Olivia Imagen</p>", unsafe_allow_html=True)
     
-    tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "✨ Crear Cuenta (Prueba Gratis)"])
-    
-    with tab_login:
-        with st.container(border=True):
-            email_input = st.text_input("Correo Electrónico", placeholder="ejemplo@olivia.com", key="login_email")
-            password_input = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
-            
-            if st.button("Ingresar al Panel", type="primary", use_container_width=True):
-                if email_input and password_input:
-                    try:
-                        # Buscamos las credenciales del usuario en Supabase
-                        res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
-                        datos_user = extraer_datos_respuesta(res_user)
+    # Creamos un formulario limpio e idéntico al que tenías en el video
+    with st.container(border=True):
+        email_input = st.text_input("Correo Electrónico", placeholder="ejemplo@olivia.com", key="login_email")
+        password_input = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
+        
+        if st.button("Ingresar al Panel", type="primary", use_container_width=True):
+            if email_input and password_input:
+                try:
+                    # Buscamos el usuario en Supabase
+                    res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
+                    datos_user = extraer_datos_respuesta(res_user)
+                    
+                    if datos_user:
+                        user_data = datos_user[0]
                         
-                        if datos_user:
-                            user_data = datos_user[0]
-                            
-                            # Búsqueda segura del password con sinónimos
-                            clave_usuario = None
-                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                if k in user_data:
+                        # Búsqueda de campo contraseña compatible
+                        clave_usuario = None
+                        for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                            if k in user_data:
                                     clave_usuario = user_data[k]
                                     break
-                            
-                            if clave_usuario is None:
-                                st.error("⚠️ Tu tabla de usuarios no tiene columna de contraseña compatible.")
-                            elif clave_usuario == password_input:
-                                st.session_state.autenticado = True
-                                st.session_state.usuario_email = user_data["email"]
-                                st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", "Olivia Imagen")
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
-                                st.rerun()
-                            else:
-                                st.error("Contraseña incorrecta. Por favor, verificá los datos.")
+                        
+                        if clave_usuario is None:
+                            st.error("⚠️ Tu tabla de usuarios no posee una columna de contraseña compatible.")
+                        elif str(clave_usuario) == str(password_input):
+                            st.session_state.autenticado = True
+                            st.session_state.usuario_email = user_data["email"]
+                            st.session_state.rol = user_data.get("rol", "Empleado")
+                            st.session_state.nombre_taller = user_data.get("taller", "Olivia Imagen")
+                            st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
+                            st.rerun()
                         else:
-                            st.error("El correo ingresado no está registrado.")
-                    except Exception as e:
-                        st.error(f"Error en el inicio de sesión: {e}")
-                else:
-                    st.warning("Por favor, completá todos los campos.")
-                    
-    with tab_registro:
-        with st.container(border=True):
-            reg_taller = st.text_input("Nombre de tu Emprendimiento", value="Olivia Imagen")
-            reg_email = st.text_input("Correo Electrónico de Registro", placeholder="ejemplo@olivia.com")
-            reg_pass = st.text_input("Contraseña Nueva", type="password", placeholder="Mínimo 6 caracteres")
-            reg_rol = st.selectbox("Rol por Defecto", ["Admin", "Empleado"])
-            
-            if st.button("Crear Cuenta e Instalar Base", use_container_width=True):
-                if reg_taller and reg_email and reg_pass:
-                    try:
-                        # Buscamos de forma preventiva cómo se llama la columna de password en la tabla usuarios de Supabase
-                        res_test = supabase.table("usuarios").select("*").limit(1).execute()
-                        test_data = extraer_datos_respuesta(res_test)
-                        
-                        col_pass_db = "password"
-                        if test_data and len(test_data) > 0:
-                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                if k in test_data[0]:
-                                    col_pass_db = k
-                                    break
-                        
-                        nuevo_usuario = {
-                            "email": reg_email,
-                            col_pass_db: reg_pass,
-                            "rol": reg_rol,
-                            "taller": reg_taller
-                        }
-                        
-                        supabase.table("usuarios").insert(nuevo_usuario).execute()
-                        st.success("¡Cuenta creada con éxito! Ahora podés iniciar sesión en la pestaña de al lado.")
-                    except Exception as e:
-                        st.error(f"Error al registrar la cuenta: {e}")
-                else:
-                    st.warning("Por favor, completa todos los campos del formulario.")
+                            st.error("Contraseña incorrecta. Por favor, verificá los datos.")
+                    else:
+                        st.error("El correo ingresado no está registrado.")
+                except Exception as e:
+                    st.error(f"Error en el inicio de sesión: {e}")
+            else:
+                st.warning("Por favor, completá todos los campos.")
 
 # ==========================================
 # 📊 PÁGINA PRINCIPAL (SISTEMA AUTENTICADO)
 # ==========================================
 else:
+    # --- CARGAR DATOS DESDE SUPABASE SÓLO CUANDO ESTÁ LOGUEADO ---
+    @st.cache_data(ttl=5)
+    def cargar_datos_seguro():
+        try:
+            # Traer Historial de operaciones
+            res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
+            datos_historial = extraer_datos_respuesta(res_historial)
+            df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
+            if not df_hist_tmp.empty:
+                df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
+                df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
+                
+            # Traer Stock
+            res_stock = supabase.table("stock").select("*").execute()
+            datos_stock = extraer_datos_respuesta(res_stock)
+            df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
+            
+            if not df_stock_tmp.empty:
+                df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
+                df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
+                
+                col_precio = None
+                for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                    if c in df_stock_tmp.columns:
+                        col_precio = c
+                        break
+                if col_precio:
+                    df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float)
+                else:
+                    df_stock_tmp["precio_costo"] = 0.0
+                
+            return df_hist_tmp, df_stock_tmp
+        except Exception as e:
+            st.error(f"Error cargando inventario/historial: {e}")
+            return pd.DataFrame(), pd.DataFrame()
+
+    df_historial, df_stock = cargar_datos_seguro()
+
+    # --- CÁLCULO DE CAJAS ---
+    caja_negocio = 0.0
+    billetera_personal = 0.0
+
+    if not df_historial.empty:
+        ingresos = df_historial[(df_historial["tipo"] == "Ingreso")]["monto"].sum()
+        gastos_negocio = df_historial[(df_historial["tipo"] == "Gasto Negocio")]["monto"].sum()
+        retiros_personales = df_historial[(df_historial["tipo"] == "Retiro Sueldo")]["monto"].sum()
+        gastos_personales = df_historial[(df_historial["tipo"] == "Gasto Personal")]["monto"].sum()
+        
+        caja_negocio = ingresos - gastos_negocio - retiros_personales
+        billetera_personal = retiros_personales - gastos_personales
+
     rol_actual = st.session_state.get("rol", "Empleado")
 
     # --- MENÚ LATERAL ---
@@ -226,7 +185,6 @@ else:
         
         st.markdown("---")
         
-        # Secciones dinámicas según el Rol del usuario autenticado
         if rol_actual == "Admin":
             secciones = [
                 "📊 Dashboard General",
@@ -311,7 +269,6 @@ else:
     elif seccion == "📝 Nueva Operación":
         st.title("📝 Registrar Nueva Operación")
         
-        # FILTRO SEGURO DE OPCIONES POR ROL
         if rol_actual == "Admin":
             opciones = [
                 "Registrar Venta / Presupuesto", 
@@ -412,7 +369,6 @@ else:
                 lambda r: "🔴 Reponer Ya" if r["cantidad"] <= r["minimo"] else "🟢 OK", axis=1
             )
             
-            # Mostramos de manera segura las columnas que existen
             columnas_mostrar = ["item", "cantidad", "minimo"]
             if "precio_costo" in df_stock.columns:
                 columnas_mostrar.append("precio_costo")
