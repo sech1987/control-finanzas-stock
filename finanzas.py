@@ -417,16 +417,29 @@ else:
         st.title("🎯 Metas de Ahorro y Alcancías")
         st.markdown("Definí objetivos claros para equipamiento, insumos grandes o fondos de emergencia.")
         
-        # 🔍 LEEMOS LAS METAS DIRECTAMENTE DE SUPABASE EN TIEMPO REAL
+        # 🔍 LEEMOS LAS METAS DIRECTAMENTE DE SUPABASE EN TIEMPO REAL (REFORZADO)
         try:
             respuesta_metas = supabase.table("metas").select("*").execute()
-            datos_metas = extraer_datos_respuesta(respuesta_metas)
-            df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
+            
+            # Extraemos los datos de forma robusta
+            if isinstance(respuesta_metas, tuple):
+                datos_metas = respuesta_metas[0].data if hasattr(respuesta_metas[0], "data") else respuesta_metas[0]
+            elif hasattr(respuesta_metas, "data"):
+                datos_metas = respuesta_metas.data
+            else:
+                datos_metas = respuesta_metas
+                
+            # Forzamos a que df_metas sea SÍ O SÍ un DataFrame de Pandas
+            if isinstance(datos_metas, list) and len(datos_metas) > 0:
+                df_metas = pd.DataFrame(datos_metas)
+            else:
+                df_metas = pd.DataFrame() # DataFrame vacío legítimo de Pandas
+                
         except Exception as e:
             st.error(f"Error al conectar con la base de datos de metas: {e}")
             df_metas = pd.DataFrame()
         
-        # --- FORMULARIO PARA CREAR NUEVA META (CORREGIDO Y SEGURO) ---
+        # --- FORMULARIO PARA CREAR NUEVA META ---
         with st.container(border=True):
             st.subheader("🆕 Crear Nueva Alcancía")
             with st.form("form_nueva_meta", clear_on_submit=True):
