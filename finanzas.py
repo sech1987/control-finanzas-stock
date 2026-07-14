@@ -30,6 +30,19 @@ try:
 except Exception as e:
     st.error(f"Error de conexión con Supabase: {e}")
 
+# --- FUNCIÓN AUXILIAR PARA EXTRAER DATOS DE SUPABASE ---
+def extraer_datos_respuesta(res):
+    """Función segura para extraer datos sin importar si la respuesta es tupla u objeto."""
+    if isinstance(res, tuple):
+        # Si la respuesta es una tupla, los datos suelen ser el primer elemento o estar en una estructura interna
+        data = res[0]
+        if hasattr(data, "data"):
+            return data.data
+        return data
+    elif hasattr(res, "data"):
+        return res.data
+    return []
+
 # --- CONFIGURACIÓN DE IA (CONEXIÓN DIRECTA POR API) ---
 def consultar_gemini_directo(prompt_texto):
     try:
@@ -67,14 +80,16 @@ def cargar_datos():
     try:
         # Traer Historial de operaciones
         res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
-        df_historial = pd.DataFrame(res_historial.data) if res_historial.data else pd.DataFrame()
+        datos_historial = extraer_datos_respuesta(res_historial)
+        df_historial = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
         if not df_historial.empty:
             df_historial["fecha"] = pd.to_datetime(df_historial["fecha"])
             df_historial["monto"] = df_historial["monto"].astype(float)
             
         # Traer Stock
         res_stock = supabase.table("stock").select("*").execute()
-        df_stock = pd.DataFrame(res_stock.data) if res_stock.data else pd.DataFrame()
+        datos_stock = extraer_datos_respuesta(res_stock)
+        df_stock = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
         if not df_stock.empty:
             df_stock["cantidad"] = df_stock["cantidad"].astype(float)
             df_stock["minimo"] = df_stock["minimo"].astype(float)
@@ -123,9 +138,10 @@ if not st.session_state.get("autenticado", False):
                     try:
                         # Buscamos las credenciales del usuario en Supabase
                         res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
+                        datos_user = extraer_datos_respuesta(res_user)
                         
-                        if res_user.data:
-                            user_data = res_user.data[0]
+                        if datos_user:
+                            user_data = datos_user[0]
                             # Verificación de contraseña
                             if user_data["password"] == password_input:
                                 st.session_state.autenticado = True
@@ -404,7 +420,8 @@ else:
         # 🔍 LEEMOS LAS METAS DIRECTAMENTE DE SUPABASE EN TIEMPO REAL
         try:
             respuesta_metas = supabase.table("metas").select("*").execute()
-            df_metas = pd.DataFrame(respuesta_metas.data) if respuesta_metas.data else pd.DataFrame()
+            datos_metas = extraer_datos_respuesta(respuesta_metas)
+            df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
         except Exception as e:
             st.error(f"Error al conectar con la base de datos de metas: {e}")
             df_metas = pd.DataFrame()
@@ -420,7 +437,6 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
                     if nueva_meta_nombre:
                         try:
-                            # Insertamos sin el campo 'taller' que no existe en tu base de datos
                             supabase.table("metas").insert({
                                 "meta": nueva_meta_nombre,
                                 "objetivo": objetivo_monto,
@@ -443,7 +459,9 @@ else:
             st.subheader("📌 Tus Alcancías")
             for idx, row in df_metas.iterrows():
                 with st.container(border=True):
-                    obj = float(row['objective'] if 'objective' in row else row['objetivo'])
+                    # Comprobación segura del nombre del campo
+                    obj_col = 'objective' if 'objective' in row else 'objetivo'
+                    obj = float(row[obj_col])
                     acum = float(row.get('acumulado', 0.0))
                     
                     # Calculamos el porcentaje real de ahorro
