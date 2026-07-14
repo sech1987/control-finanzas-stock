@@ -6,7 +6,7 @@ import requests
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Olivia Imagen - Gestión Financiera", page_icon="🛍️", layout="wide")
 
-# --- CONTROL DE SESIÓN (INICIALIZACIÓN ULTRA SEGURA ARRIBA DE TODO) ---
+# --- CONTROL DE SESIÓN ---
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "nombre_taller" not in st.session_state:
@@ -30,7 +30,7 @@ try:
 except Exception as e:
     st.error(f"Error de conexión con Supabase: {e}")
 
-# --- FUNCIÓN AUXILIAR PARA EXTRAER DATOS DE SUPABASE ---
+# --- FUNCIÓN AUXILIAR PARA EXTRAER DATOS ---
 def extraer_datos_respuesta(res):
     if isinstance(res, tuple):
         data = res[0]
@@ -41,14 +41,14 @@ def extraer_datos_respuesta(res):
         return res.data
     return []
 
-# --- CONFIGURACIÓN DE IA (CONEXIÓN DIRECTA POR API) ---
+# --- CONFIGURACIÓN DE IA (CONEXIÓN DIRECTA) ---
 def consultar_gemini_directo(prompt_texto):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
         if not api_key:
             return "⚠️ No se detectó la clave de Google en los secretos de Streamlit."
             
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         payload = {"contents": [{"parts": [{"text": prompt_texto}]}]}
         
@@ -57,30 +57,21 @@ def consultar_gemini_directo(prompt_texto):
         
         if "candidates" in data and len(data["candidates"]) > 0:
             return data["candidates"][0]["content"]["parts"][0]["text"]
+        elif "error" in data:
+            return f"⚠️ Nota del servidor: {data['error'].get('message', 'Error de cuota o clave inválida')}"
             
-        # PLAN B AUTOMÁTICO EN CASO DE ERROR
-        url_pro = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro-latest:generateContent?key={api_key}"
-        response_pro = requests.post(url_pro, headers=headers, json=payload, timeout=20)
-        data_pro = response_pro.json()
-        
-        if "candidates" in data_pro and len(data_pro["candidates"]) > 0:
-            return data_pro["candidates"][0]["content"]["parts"][0]["text"]
-        elif "error" in data_pro:
-            return f"⚠️ Nota del servidor: {data_pro['error'].get('message', 'Sin saldo o cuota excedida')}"
-            
-        return "⚠️ El servidor no devolvió respuesta. Verificá si tenés saldo disponible en Google Studio."
+        return "⚠️ El servidor de IA no devolvió una respuesta válida."
     except Exception as e:
-        return f"⚠️ Error de conexión con el módulo de IA. (Detalle: {e})"
+        return f"⚠️ Error de conexión con el módulo de IA: {e}"
 
 
 # ==========================================
-# 🔐 PANTALLA DE INICIO DE SESIÓN (LOGIN) - LIMPIA COMO EL VIDEO
+# 🔐 PANTALLA DE INICIO DE SESIÓN (LOGIN)
 # ==========================================
 if not st.session_state.get("autenticado", False):
     st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>💼 Finanzas & Stock Manager Pro</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Ingresá tus credenciales para acceder al sistema de gestión de Olivia Imagen</p>", unsafe_allow_html=True)
     
-    # Creamos un formulario limpio e idéntico al que tenías en el video
     with st.container(border=True):
         email_input = st.text_input("Correo Electrónico", placeholder="ejemplo@olivia.com", key="login_email")
         password_input = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
@@ -88,19 +79,17 @@ if not st.session_state.get("autenticado", False):
         if st.button("Ingresar al Panel", type="primary", use_container_width=True):
             if email_input and password_input:
                 try:
-                    # Buscamos el usuario en Supabase
                     res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
                     datos_user = extraer_datos_respuesta(res_user)
                     
                     if datos_user:
                         user_data = datos_user[0]
                         
-                        # Búsqueda de campo contraseña compatible
                         clave_usuario = None
                         for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
                             if k in user_data:
-                                    clave_usuario = user_data[k]
-                                    break
+                                clave_usuario = user_data[k]
+                                break
                         
                         if clave_usuario is None:
                             st.error("⚠️ Tu tabla de usuarios no posee una columna de contraseña compatible.")
@@ -124,11 +113,11 @@ if not st.session_state.get("autenticado", False):
 # 📊 PÁGINA PRINCIPAL (SISTEMA AUTENTICADO)
 # ==========================================
 else:
-    # --- CARGAR DATOS DESDE SUPABASE SÓLO CUANDO ESTÁ LOGUEADO ---
-    @st.cache_data(ttl=5)
+    # --- CARGAR DATOS DESDE SUPABASE ---
+    @st.cache_data(ttl=3)
     def cargar_datos_seguro():
         try:
-            # Traer Historial de operaciones
+            # Traer Historial
             res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
             datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
@@ -157,10 +146,18 @@ else:
                 
             return df_hist_tmp, df_stock_tmp
         except Exception as e:
-            st.error(f"Error cargando inventario/historial: {e}")
+            st.error(f"Error cargando base de datos: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
     df_historial, df_stock = cargar_datos_seguro()
+
+    # --- DETECCIÓN DINÁMICA DE LA COLUMNA DETALLE/DESCRIPCIÓN ---
+    col_desc_detectada = "descripcion"
+    if not df_historial.empty:
+        for c in ["descripción", "descripcion", "detalle", "concepto"]:
+            if c in df_historial.columns:
+                col_desc_detectada = c
+                break
 
     # --- CÁLCULO DE CAJAS ---
     caja_negocio = 0.0
@@ -191,8 +188,10 @@ else:
                 "🤖 Consultor IA",
                 "📝 Nueva Operación",
                 "🧮 Calculadora de Costos",
+                "📉 Punto de Equilibrio",
                 "📦 Stock de Insumos",
-                "🎯 Metas de Ahorro"
+                "🎯 Metas de Ahorro",
+                "👥 Personal del Taller"
             ]
         else:
             secciones = [
@@ -209,7 +208,7 @@ else:
             st.rerun()
 
     # ==========================================
-    # 📊 DASHBOARD GENERAL (SÓLO ADMIN)
+    # 📊 DASHBOARD GENERAL
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title("📊 Control de Mando - Olivia Imagen")
@@ -222,20 +221,26 @@ else:
             
         st.markdown("---")
         st.subheader("📈 Últimos Movimientos Generales")
+        
         if df_historial.empty:
             st.info("No hay transacciones registradas.")
         else:
+            columnas_a_mostrar = ["fecha", "tipo"]
+            if col_desc_detectada in df_historial.columns:
+                columnas_a_mostrar.append(col_desc_detectada)
+            columnas_a_mostrar.append("monto")
+            
             st.dataframe(
-                df_historial[["fecha", "tipo", "descripcion", "monto"]].head(10),
+                df_historial[columnas_a_mostrar].head(10),
                 use_container_width=True
             )
 
     # ==========================================
-    # 🤖 CONSULTOR IA (SÓLO ADMIN)
+    # 🤖 CONSULTOR IA
     # ==========================================
     elif seccion == "🤖 Consultor IA" and rol_actual == "Admin":
         st.title("🤖 Consultor Financiero IA Inteligente")
-        st.markdown("Dejá que la Inteligencia Artificial analice tus números para encontrar áreas de optimización y fugas de dinero.")
+        st.markdown("Análisis automático de tus números para optimizar tu taller gráfico.")
         
         items_criticos_lista = []
         if not df_stock.empty:
@@ -246,25 +251,25 @@ else:
         items_criticos_txt = ", ".join(items_criticos_lista) if items_criticos_lista else "Ninguno (Stock Ok)"
 
         with st.container(border=True):
-            st.subheader("📊 Resumen Enviado al Consultor")
+            st.subheader("📊 Resumen de Datos Enviados")
             st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
             st.write(f"🛠️ **Fondos en Caja:** $ {caja_negocio:,.2f}")
             st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
-            st.write(f"📦 **Insumos Críticos a Reponer:** {items_criticos_txt}")
+            st.write(f"📦 **Insumos Críticos:** {items_criticos_txt}")
 
         if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
-            with st.spinner("🤖 Analizando base de datos en tiempo real..."):
-                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos registrados"
-                resumen_data = f"Nombre: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCriticos: {items_criticos_txt}\nHistorial:\n{historial_texto}"
+            with st.spinner("🤖 Analizando base de datos..."):
+                historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos"
+                resumen_data = f"Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nCríticos: {items_criticos_txt}\nHistorial:\n{historial_texto}"
                 
-                prompt_expert = f"Actúa como consultor financiero estratégico para un taller gráfico y de personalización en Argentina. Analizá los siguientes datos:\n{resumen_data}\nDevolvé un reporte estructurado con diagnóstico operativo, fugas de dinero o riesgos, y 3 consejos de rentabilidad clave. Hablá en español rioplatense (Argentina), de forma directa, corporativa pero cercana."
+                prompt_expert = f"Actuá como asesor financiero para un taller gráfico en Argentina. Analizá: {resumen_data}. Brindá un diagnóstico corto, directo, en español rioplatense, con 3 tips de rentabilidad clave."
                 
                 respuesta_ia = consultar_gemini_directo(prompt_expert)
                 st.markdown("<br><hr>", unsafe_allow_html=True)
                 st.markdown(respuesta_ia)
 
     # ==========================================
-    # 📝 NUEVA OPERACIÓN (FILTRADO POR ROL)
+    # 📝 NUEVA OPERACIÓN
     # ==========================================
     elif seccion == "📝 Nueva Operación":
         st.title("📝 Registrar Nueva Operación")
@@ -300,36 +305,38 @@ else:
                         tipo_db = "Gasto Personal"
                     
                     try:
-                        supabase.table("historial").insert({
+                        fila_insertar = {
                             "fecha": datetime.now().isoformat(),
                             "tipo": tipo_db,
-                            "descripcion": desc_op,
                             "monto": monto_op
-                        }).execute()
+                        }
+                        fila_insertar[col_desc_detectada] = desc_op
+                        
+                        supabase.table("historial").insert(fila_insertar).execute()
                         st.success("¡Operación registrada con éxito!")
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar en base de datos: {e}")
                 else:
-                    st.warning("Por favor, poné un concepto o descripción para el registro.")
+                    st.warning("Por favor, ingresá una descripción para guardar la operación.")
 
     # ==========================================
-    # 🧮 CALCULADORA DE COSTOS (SÓLO ADMIN)
+    # 🧮 CALCULADORA DE COSTOS
     # ==========================================
     elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
         st.title("🧮 Calculadora de Costos Gráficos")
         
         with st.container(border=True):
             col_e1, col_e2 = st.columns(2)
-            producto = col_e1.text_input("Nombre del Trabajo (Ej: Remera estampada)", value="Trabajo Personalizado")
+            producto = col_e1.text_input("Nombre del Trabajo", value="Trabajo Personalizado")
             costo_fijo = col_e2.number_input("Costos de Insumos ($)", min_value=0.0, step=100.0)
             
             col_e3, col_e4 = st.columns(2)
-            horas_diseno = col_e3.number_input("Horas de Trabajo Estimadas", min_value=0.0, step=0.5)
-            valor_hora = col_e4.number_input("Valor de tu Hora de Trabajo ($)", min_value=0.0, value=2500.0, step=500.0)
+            horas_diseno = col_e3.number_input("Horas de Trabajo", min_value=0.0, step=0.1)
+            valor_hora = col_e4.number_input("Valor Hora ($)", min_value=0.0, value=2500.0, step=100.0)
             
-            porcentaje_ganancia = st.slider("Margen de Ganancia Deseado (%)", min_value=10, max_value=200, value=50, step=5)
+            porcentaje_ganancia = st.slider("Margen de Ganancia (%)", min_value=10, max_value=200, value=50, step=5)
             
             mano_obra = horas_diseno * valor_hora
             costo_total = costo_fijo + mano_obra
@@ -342,28 +349,47 @@ else:
             col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {ganancia_neta:,.2f}")
             
             st.markdown("---")
-            st.subheader("📝 Presupuesto Listo para Enviar")
-            st.markdown("Copiá este texto y mandaselo directo a tu cliente por WhatsApp o mensaje:")
-            
             texto_presupuesto = (
                 f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{producto}*\n\n"
                 f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
                 f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
-                f"⚠️ *Condiciones:* Válido por 5 días debido a la reposición de insumos. "
-                f"Se inicia el trabajo con una seña del 50%.\n\n"
                 f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
             )
-            
-            st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=180, key="txt_presupuesto_cliente")
+            st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=150)
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS
+    # 📉 PUNTO DE EQUILIBRIO (RESTAURADO)
+    # ==========================================
+    elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
+        st.title("📉 Punto de Equilibrio - Olivia Imagen")
+        st.markdown("Conocé con precisión cuánto tenés que facturar para cubrir tus costos fijos y variables mensuales.")
+        
+        with st.container(border=True):
+            st.subheader("⚙️ Parámetros de Simulación Financiera")
+            col_eq1, col_eq2 = st.columns(2)
+            costos_fijos_fijos = col_eq1.number_input("Costos Fijos del Mes ($) (Alquiler, Luz, Impuestos, etc.)", min_value=0.0, value=150000.0, step=5000.0)
+            margen_contribucion = col_eq2.slider("Margen de Ganancia Promedio sobre Insumos (%)", min_value=10, max_value=200, value=50, step=5)
+            
+            # Cálculos de punto de equilibrio financiero
+            # Margen de contribución en porcentaje = ganancia / venta sugerida
+            porcentaje_margen = (margen_contribucion / (100 + margen_contribucion))
+            punto_equilibrio_pesos = costos_fijos_fijos / porcentaje_margen if porcentaje_margen > 0 else 0.0
+            
+            st.markdown("---")
+            col_eqr1, col_eqr2 = st.columns(2)
+            col_eqr1.metric("🏁 FACTURACIÓN MÍNIMA REQUERIDA", f"$ {punto_equilibrio_pesos:,.2f}")
+            col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
+            
+            st.info(f"💡 **Explicación sencilla:** Para cubrir tus costos fijos de **$ {costos_fijos_fijos:,.2f}**, necesitás facturar al menos **$ {punto_equilibrio_pesos:,.2f}** en el mes. A partir de esa cifra, cada peso que ingresa al taller es ganancia neta.")
+
+    # ==========================================
+    # 📦 STOCK DE INSUMOS (CON ALTA DE CATEGORÍAS/INSUMOS NUEVOS)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
         
         if df_stock.empty:
-            st.info("No hay insumos cargados en stock.")
+            st.info("No hay insumos en el inventario.")
         else:
             df_stock["Alerta"] = df_stock.apply(
                 lambda r: "🔴 Reponer Ya" if r["cantidad"] <= r["minimo"] else "🟢 OK", axis=1
@@ -378,45 +404,79 @@ else:
             
             if rol_actual == "Admin":
                 st.markdown("---")
-                st.subheader("✏️ Ajustar Stock")
-                with st.form("form_ajuste_stock"):
-                    col_s1, col_s2 = st.columns(2)
-                    item_seleccionado = col_s1.selectbox("Insumo a modificar", df_stock["item"].tolist())
-                    nueva_cantidad = col_s2.number_input("Nueva Cantidad en Stock", min_value=0.0, step=1.0)
-                    
-                    if st.form_submit_button("⚙️ Actualizar Stock"):
-                        try:
-                            supabase.table("stock").update({"cantidad": nueva_cantidad}).eq("item", item_seleccionado).execute()
-                            st.success(f"¡Stock de {item_seleccionado} actualizado a {nueva_cantidad}!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al modificar el stock: {e}")
+                tab_ajustar, tab_crear_categoria = st.tabs(["✏️ Ajustar Cantidades", "🆕 Crear Nuevo Insumo / Categoría"])
+                
+                with tab_ajustar:
+                    with st.form("form_ajuste_stock"):
+                        col_s1, col_s2 = st.columns(2)
+                        item_seleccionado = col_s1.selectbox("Insumo a modificar", df_stock["item"].tolist())
+                        nueva_cantidad = col_s2.number_input("Nueva Cantidad en Stock (Entero)", min_value=0, step=1, value=0)
+                        
+                        if st.form_submit_button("⚙️ Actualizar Stock"):
+                            try:
+                                supabase.table("stock").update({"cantidad": int(nueva_cantidad)}).eq("item", item_seleccionado).execute()
+                                st.success(f"¡Stock de {item_seleccionado} actualizado a {int(nueva_cantidad)}!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al modificar el stock: {e}")
+                                
+                with tab_crear_categoria:
+                    with st.form("form_crear_insumo"):
+                        st.subheader("Registrar Insumo Nuevo en la Base")
+                        col_crea1, col_crea2 = st.columns(2)
+                        nuevo_nombre_item = col_crea1.text_input("Nombre del Insumo / Categoría (Ej: Vinilo Holográfico)")
+                        precio_costo_nuevo = col_crea2.number_input("Precio de Costo Inicial ($)", min_value=0.0, step=100.0)
+                        
+                        col_crea3, col_crea4 = st.columns(2)
+                        cantidad_inicial_nueva = col_crea3.number_input("Stock Inicial", min_value=0, step=1)
+                        minimo_alerta_nuevo = col_crea4.number_input("Punto de Reorden Mínimo", min_value=0, step=1, value=5)
+                        
+                        if st.form_submit_button("💾 Guardar Insumo Nuevo"):
+                            if nuevo_nombre_item:
+                                try:
+                                    # Determinamos de forma dinámica el nombre de la columna precio
+                                    col_precio_db = "precio_costo"
+                                    for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                                        if c in df_stock.columns:
+                                            col_precio_db = c
+                                            break
+                                    
+                                    nuevo_registro = {
+                                        "item": nuevo_nombre_item,
+                                        "cantidad": int(cantidad_inicial_nueva),
+                                        "minimo": int(minimo_alerta_nuevo),
+                                        col_precio_db: float(precio_costo_nuevo)
+                                    }
+                                    
+                                    supabase.table("stock").insert(nuevo_registro).execute()
+                                    st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error al registrar insumo: {e}")
+                            else:
+                                st.warning("Por favor, ingresá un nombre para el nuevo insumo.")
 
     # ==========================================
-    # 🎯 METAS DE AHORRO (SÓLO ADMIN)
+    # 🎯 METAS DE AHORRO
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro y Alcancías")
-        st.markdown("Definí objetivos claros para equipamiento, insumos grandes o fondos de emergencia.")
         
         try:
             respuesta_metas = supabase.table("metas").select("*").execute()
             datos_metas = extraer_datos_respuesta(respuesta_metas)
-            
-            if isinstance(datos_metas, list) and len(datos_metas) > 0:
-                df_metas = pd.DataFrame(datos_metas)
-            else:
-                df_metas = pd.DataFrame()
+            df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
         except Exception as e:
-            st.error(f"Error al conectar con la base de datos de metas: {e}")
+            st.error(f"Error con la tabla metas: {e}")
             df_metas = pd.DataFrame()
         
         with st.container(border=True):
             st.subheader("🆕 Crear Nueva Alcancía")
             with st.form("form_nueva_meta", clear_on_submit=True):
                 col_f1, col_f2 = st.columns(2)
-                nueva_meta_nombre = col_f1.text_input("¿Para qué estás ahorrando? (Ej: Guillotina nueva)", placeholder="Nombre de la meta")
+                nueva_meta_nombre = col_f1.text_input("¿Para qué estás ahorrando?")
                 objetivo_monto = col_f2.number_input("Monto Objetivo ($)", min_value=1.0, step=1000.0)
                 
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
@@ -427,18 +487,18 @@ else:
                                 "objetivo": objetivo_monto,
                                 "acumulado": 0.0
                             }).execute()
-                            st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
+                            st.success(f"¡Alcancía '{nueva_meta_nombre}' creada!")
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Error al guardar la meta: {e}")
+                            st.error(f"Error al guardar meta: {e}")
                     else:
-                        st.warning("Por favor, ingresá un nombre para tu meta de ahorro.")
+                        st.warning("Escribí un nombre para tu meta.")
 
         st.markdown("---")
         
         if df_metas.empty:
-            st.info("No tenés metas de ahorro creadas todavía.")
+            st.info("No hay alcancías creadas.")
         else:
             st.subheader("📌 Tus Alcancías")
             for idx, row in df_metas.iterrows():
@@ -452,9 +512,9 @@ else:
                     
                     col_m1.markdown(f"🎯 **{row['meta']}**")
                     col_m1.progress(min(1.0, acum / obj) if obj > 0 else 0.0)
-                    col_m1.caption(f"📈 Progreso: **{porcentaje:.1f}%** completado")
+                    col_m1.caption(f"📈 Progreso: **{porcentaje:.1f}%**")
                     
-                    col_m2.markdown(f"💰 **$ {acum:,.2f}** / $ {obj:,.2f}")
+                    col_m2.markdown(f"**Acumulado:** $ {acum:,.2f} / $ {obj:,.2f}")
                     
                     with col_m3:
                         monto_ahorrar = st.number_input(
@@ -464,21 +524,80 @@ else:
                             key=f"add_m_{row['id']}"
                         )
                         
-                        if st.button("💾", key=f"btn_save_m_{row['id']}", help="Guardar movimiento"):
-                            if monto_ahorrar != 0:
-                                nuevo_acumulado = acum + monto_ahorrar
-                                if nuevo_acumulado < 0:
-                                    st.error("⚠️ No podés retirar más plata de la que tenés ahorrada.")
-                                else:
-                                    supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
-                                    if monto_ahorrar > 0:
-                                        st.success(f"¡Sumaste $ {monto_ahorrar:,.2f}!")
+                        col_btns = st.columns(2)
+                        with col_btns[0]:
+                            if st.button("💾", key=f"btn_save_m_{row['id']}"):
+                                if monto_ahorrar != 0:
+                                    nuevo_acumulado = acum + monto_ahorrar
+                                    if nuevo_acumulado < 0:
+                                        st.error("No podés retirar más de lo que tenés.")
                                     else:
-                                        st.warning(f"¡Retiraste $ {abs(monto_ahorrar):,.2f} por urgencia!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                        
-                        if st.button("🗑️", key=f"del_meta_{row['id']}"):
-                            supabase.table("metas").delete().eq("id", int(row["id"])).execute()
-                            st.cache_data.clear()
+                                        supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
+                                        st.cache_data.clear()
+                                        st.rerun()
+                        with col_btns[1]:
+                            if st.button("🗑️", key=f"del_meta_{row['id']}"):
+                                supabase.table("metas").delete().eq("id", int(row["id"])).execute()
+                                st.cache_data.clear()
+                                st.rerun()
+
+    # ==========================================
+    # 👥 PERSONAL DEL TALLER (CREACIÓN DE USUARIOS - RESTAURADO)
+    # ==========================================
+    elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
+        st.title("👥 Panel de Control de Usuarios y Empleados")
+        st.markdown("Crea, gestiona y asigna permisos a los usuarios de Olivia Imagen desde este panel único.")
+        
+        # Leemos los usuarios registrados actualmente en Supabase
+        try:
+            res_usuarios_db = supabase.table("usuarios").select("*").execute()
+            datos_usuarios_db = extraer_datos_respuesta(res_usuarios_db)
+            df_usuarios_db = pd.DataFrame(datos_usuarios_db) if datos_usuarios_db else pd.DataFrame()
+        except Exception as e:
+            st.error(f"Error al leer la base de usuarios: {e}")
+            df_usuarios_db = pd.DataFrame()
+            
+        with st.container(border=True):
+            st.subheader("🆕 Crear Nuevo Usuario / Empleado")
+            with st.form("form_crear_usuario", clear_on_submit=True):
+                col_u1, col_u2 = st.columns(2)
+                nuevo_email_user = col_u1.text_input("Correo Electrónico (Para Login)", placeholder="ejemplo@olivia.com")
+                nuevo_pass_user = col_u2.text_input("Contraseña de Acceso", type="password", placeholder="Contraseña segura")
+                
+                col_u3, col_u4 = st.columns(2)
+                rol_seleccionado = col_u3.selectbox("Asignar Permisos (Rol)", ["Empleado", "Admin"])
+                nombre_empresa = col_u4.text_input("Emprendimiento", value=st.session_state.nombre_taller)
+                
+                if st.form_submit_button("👥 Guardar Nuevo Miembro"):
+                    if nuevo_email_user and nuevo_pass_user:
+                        try:
+                            # Determinamos cómo se llama la columna contraseña
+                            col_pass_db = "password"
+                            if not df_usuarios_db.empty:
+                                for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                    if k in df_usuarios_db.columns:
+                                        col_pass_db = k
+                                        break
+                                        
+                            supabase.table("usuarios").insert({
+                                "email": nuevo_email_user,
+                                col_pass_db: nuevo_pass_user,
+                                "rol": rol_seleccionado,
+                                "taller": nombre_empresa
+                            }).execute()
+                            
+                            st.success(f"¡Usuario '{nuevo_email_user}' creado con éxito como '{rol_seleccionado}'!")
                             st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al registrar usuario: {e}")
+                    else:
+                        st.warning("Completá el correo y la contraseña.")
+                        
+        st.markdown("---")
+        st.subheader("👥 Equipo Activo Registrado")
+        if df_usuarios_db.empty:
+            st.info("No hay usuarios creados en la base.")
+        else:
+            # Quitamos visualmente las contraseñas para mantener el panel seguro
+            columnas_seguras = [c for c in df_usuarios_db.columns if c not in ["password", "contraseña", "contrasena", "clave", "pass"]]
+            st.dataframe(df_usuarios_db[columnas_seguras], use_container_width=True)
