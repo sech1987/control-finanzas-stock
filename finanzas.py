@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import requests
+import io
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Olivia Imagen - Gestión Financiera", page_icon="🛍️", layout="wide")
@@ -208,7 +209,7 @@ else:
             st.rerun()
 
     # ==========================================
-    # 📊 DASHBOARD GENERAL
+    # 📊 DASHBOARD GENERAL (SÓLO ADMIN)
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title("📊 Control de Mando - Olivia Imagen")
@@ -230,10 +231,35 @@ else:
                 columnas_a_mostrar.append(col_desc_detectada)
             columnas_a_mostrar.append("monto")
             
+            # Mostramos la tabla interactiva
             st.dataframe(
-                df_historial[columnas_a_mostrar].head(10),
+                df_historial[columnas_a_mostrar].head(15),
                 use_container_width=True
             )
+            
+            # --- 📥 GENERADOR Y BOTÓN DE DESCARGA EXCEL (NUEVO) ---
+            try:
+                # Creamos un archivo Excel en memoria usando Pandas y BytesIO
+                output = io.BytesIO()
+                # Copiamos el dataframe limpio para descargar entero
+                df_exportar = df_historial[columnas_a_mostrar].copy()
+                # Formateamos la fecha a texto simple para evitar problemas de formato en Excel
+                df_exportar["fecha"] = df_exportar["fecha"].dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Guardamos como un archivo CSV separado por comas con codificación UTF-8 para que Excel lo abra perfecto
+                csv_data = df_exportar.to_csv(index=False, encoding="utf-8-sig")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button(
+                    label="📥 Descargar todos los Movimientos (Excel/CSV)",
+                    data=csv_data,
+                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    help="Hacé clic para bajar la planilla completa en formato CSV compatible con Microsoft Excel."
+                )
+            except Exception as ex_b:
+                st.warning(f"No se pudo preparar el archivo de descarga: {ex_b}")
 
     # ==========================================
     # 🤖 CONSULTOR IA
@@ -358,7 +384,7 @@ else:
             st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=150)
 
     # ==========================================
-    # 📉 PUNTO DE EQUILIBRIO (RESTAURADO)
+    # 📉 PUNTO DE EQUILIBRIO
     # ==========================================
     elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
         st.title("📉 Punto de Equilibrio - Olivia Imagen")
@@ -370,8 +396,6 @@ else:
             costos_fijos_fijos = col_eq1.number_input("Costos Fijos del Mes ($) (Alquiler, Luz, Impuestos, etc.)", min_value=0.0, value=150000.0, step=5000.0)
             margen_contribucion = col_eq2.slider("Margen de Ganancia Promedio sobre Insumos (%)", min_value=10, max_value=200, value=50, step=5)
             
-            # Cálculos de punto de equilibrio financiero
-            # Margen de contribución en porcentaje = ganancia / venta sugerida
             porcentaje_margen = (margen_contribucion / (100 + margen_contribucion))
             punto_equilibrio_pesos = costos_fijos_fijos / porcentaje_margen if porcentaje_margen > 0 else 0.0
             
@@ -383,7 +407,7 @@ else:
             st.info(f"💡 **Explicación sencilla:** Para cubrir tus costos fijos de **$ {costos_fijos_fijos:,.2f}**, necesitás facturar al menos **$ {punto_equilibrio_pesos:,.2f}** en el mes. A partir de esa cifra, cada peso que ingresa al taller es ganancia neta.")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (CON ALTA DE CATEGORÍAS/INSUMOS NUEVOS)
+    # 📦 STOCK DE INSUMOS
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -435,7 +459,6 @@ else:
                         if st.form_submit_button("💾 Guardar Insumo Nuevo"):
                             if nuevo_nombre_item:
                                 try:
-                                    # Determinamos de forma dinámica el nombre de la columna precio
                                     col_precio_db = "precio_costo"
                                     for c in ["precio_costo", "precio", "costo", "valor_costo"]:
                                         if c in df_stock.columns:
@@ -539,16 +562,15 @@ else:
                             if st.button("🗑️", key=f"del_meta_{row['id']}"):
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                                 st.cache_data.clear()
-                                st.rerun()
+                                rerun()
 
     # ==========================================
-    # 👥 PERSONAL DEL TALLER (CREACIÓN DE USUARIOS - RESTAURADO)
+    # 👥 PERSONAL DEL TALLER
     # ==========================================
     elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
         st.title("👥 Panel de Control de Usuarios y Empleados")
-        st.markdown("Crea, gestiona y asigna permisos a los usuarios de Olivia Imagen desde este panel único.")
+        st.markdown("Crea, gestiona y asigna permisos a los usuarios de Olivia Imagen.")
         
-        # Leemos los usuarios registrados actualmente en Supabase
         try:
             res_usuarios_db = supabase.table("usuarios").select("*").execute()
             datos_usuarios_db = extraer_datos_respuesta(res_usuarios_db)
@@ -571,7 +593,6 @@ else:
                 if st.form_submit_button("👥 Guardar Nuevo Miembro"):
                     if nuevo_email_user and nuevo_pass_user:
                         try:
-                            # Determinamos cómo se llama la columna contraseña
                             col_pass_db = "password"
                             if not df_usuarios_db.empty:
                                 for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
@@ -598,6 +619,5 @@ else:
         if df_usuarios_db.empty:
             st.info("No hay usuarios creados en la base.")
         else:
-            # Quitamos visualmente las contraseñas para mantener el panel seguro
             columnas_seguras = [c for c in df_usuarios_db.columns if c not in ["password", "contraseña", "contrasena", "clave", "pass"]]
             st.dataframe(df_usuarios_db[columnas_seguras], use_container_width=True)
