@@ -6,6 +6,16 @@ import requests
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Olivia Imagen - Gestión Financiera", page_icon="🛍️", layout="wide")
 
+# --- CONTROL DE SESIÓN (INICIALIZACIÓN ULTRA SEGURA ARRIBA DE TODO) ---
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "nombre_taller" not in st.session_state:
+    st.session_state.nombre_taller = "Olivia Imagen"
+if "rol" not in st.session_state:
+    st.session_state.rol = "Empleado"
+if "usuario_email" not in st.session_state:
+    st.session_state.usuario_email = ""
+
 # --- CONEXIÓN A SUPABASE ---
 from supabase import create_client, Client
 
@@ -94,20 +104,10 @@ if not df_historial.empty:
     caja_negocio = ingresos - gastos_negocio - retiros_personales
     billetera_personal = retiros_personales - gastos_personales
 
-# --- CONTROL DE SESIÓN ---
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
-if "nombre_taller" not in st.session_state:
-    st.session_state.nombre_taller = "Olivia Imagen"
-if "rol" not in st.session_state:
-    st.session_state.rol = "Empleado"
-if "usuario_email" not in st.session_state:
-    st.session_state.usuario_email = ""
-
 # ==========================================
 # 🔐 PANTALLA DE INICIO DE SESIÓN (LOGIN)
 # ==========================================
-if not st.session_state.autenticado:
+if not st.session_state.get("autenticado", False):
     st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>💼 Finanzas & Stock Manager Pro</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Ingresá tus credenciales para acceder al sistema de gestión de Olivia Imagen</p>", unsafe_allow_html=True)
     
@@ -121,7 +121,7 @@ if not st.session_state.autenticado:
             if st.button("Ingresar al Panel", type="primary", use_container_width=True):
                 if email_input and password_input:
                     try:
-                        # Buscamos las credenciales del usuario en Supabase (tabla 'usuarios')
+                        # Buscamos las credenciales del usuario en Supabase
                         res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
                         
                         if res_user.data:
@@ -170,7 +170,7 @@ if not st.session_state.autenticado:
 # 📊 PÁGINA PRINCIPAL (SISTEMA AUTENTICADO)
 # ==========================================
 else:
-    rol_actual = st.session_state.rol
+    rol_actual = st.session_state.get("rol", "Empleado")
 
     # --- MENÚ LATERAL ---
     with st.sidebar:
