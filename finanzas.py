@@ -18,6 +18,8 @@ if "usuario_email" not in st.session_state:
     st.session_state.usuario_email = ""
 if "usuario_id" not in st.session_state:
     st.session_state.usuario_id = None
+if "owner_id" not in st.session_state:
+    st.session_state.owner_id = None
 
 # --- CONEXIÓN A SUPABASE ---
 from supabase import create_client, Client
@@ -112,8 +114,15 @@ if not st.session_state.get("autenticado", False):
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.usuario_email = user_data["email"]
                                 st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
+                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen")) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                                
+                                # Definir el owner_id de la sesión para aislar los datos
+                                if st.session_state.rol == "Admin":
+                                    st.session_state.owner_id = user_data["id"]
+                                else:
+                                    st.session_state.owner_id = user_data.get("owner_id")
+                                    
+                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                                 st.rerun()
                             else:
                                 st.error("Contraseña incorrecta.")
@@ -190,15 +199,22 @@ if not st.session_state.get("autenticado", False):
 # 📊 PÁGINA PRINCIPAL (SISTEMA AUTENTICADO)
 # ==========================================
 else:
-    # --- CARGAR DATOS DESDE SUPABASE ---
+    # ID del dueño de los datos actuales (para aislar por completo cada cuenta)
+    id_propietario_datos = st.session_state.get("owner_id")
+
+    # --- CARGAR DATOS DESDE SUPABASE AISLADOS ---
     @st.cache_data(ttl=3)
-    def cargar_datos_seguro():
+    def cargar_datos_seguro(owner_id_filtro):
         try:
-            # Traer Historial
+            # Traer Historial filtrado por owner_id (si tiene la columna, de lo contrario traer todos por compatibilidad)
             res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
             datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
+            
             if not df_hist_tmp.empty:
+                # Filtrar si la columna 'owner_id' existe físicamente en el historial
+                if "owner_id" in df_hist_tmp.columns and owner_id_filtro is not None:
+                    df_hist_tmp = df_hist_tmp[df_hist_tmp["owner_id"] == owner_id_filtro]
                 df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
                 df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
                 
@@ -208,6 +224,9 @@ else:
             df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
             
             if not df_stock_tmp.empty:
+                # Filtrar si la columna 'owner_id' existe en la tabla de stock
+                if "owner_id" in df_stock_tmp.columns and owner_id_filtro is not None:
+                    df_stock_tmp = df_stock_tmp[df_stock_tmp["owner_id"] == owner_id_filtro]
                 df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
                 df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
                 
@@ -226,7 +245,7 @@ else:
             st.error(f"Error cargando base de datos: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
-    df_historial, df_stock = cargar_datos_seguro()
+    df_historial, df_stock = cargar_datos_seguro(id_propietario_datos)
 
     # --- DETECCIÓN DINÁMICA DE LA COLUMNA DETALLE/DESCRIPCIÓN ---
     col_desc_detectada = "descripcion"
@@ -283,6 +302,7 @@ else:
             st.session_state.autenticado = False
             st.session_state.usuario_email = ""
             st.session_state.usuario_id = None
+            st.session_state.owner_id = None
             st.rerun()
 
     # ==========================================
@@ -449,12 +469,24 @@ else:
                         tipo_db = "Gasto Personal"
                     
                     try:
+                        # 1. Detectar estructura para ver si historial maneja la columna de aislamiento
+                        res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
+                        datos_sample_hist = extraer_datos_respuesta(res_sample_hist)
+                        
+                        columnas_existentes_hist = []
+                        if datos_sample_hist and len(datos_sample_hist) > 0:
+                            columnas_existentes_hist = list(datos_sample_hist[0].keys())
+                        
                         fila_insertar = {
                             "fecha": datetime.now().isoformat(),
                             "tipo": tipo_db,
                             "monto": monto_op
                         }
                         fila_insertar[col_desc_detectada] = desc_op
+                        
+                        # Inyectamos el ID del propietario si la columna ya está creada
+                        if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None:
+                            fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
                         st.success("¡Operación registrada con éxito!")
@@ -528,7 +560,7 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS
+    # 📦 STOCK DE INSUMOS (AISLADO)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -580,9 +612,16 @@ else:
                         if st.form_submit_button("💾 Guardar Insumo Nuevo"):
                             if nuevo_nombre_item:
                                 try:
+                                    res_sample_st = supabase.table("stock").select("*").limit(1).execute()
+                                    datos_sample_st = extraer_datos_respuesta(res_sample_st)
+                                    
+                                    columnas_existentes_st = []
+                                    if datos_sample_st and len(datos_sample_st) > 0:
+                                        columnas_existentes_st = list(datos_sample_st[0].keys())
+                                        
                                     col_precio_db = "precio_costo"
                                     for c in ["precio_costo", "precio", "costo", "valor_costo"]:
-                                        if c in df_stock.columns:
+                                        if c in columnas_existentes_st:
                                             col_precio_db = c
                                             break
                                     
@@ -592,6 +631,9 @@ else:
                                         "minimo": int(minimo_alerta_nuevo),
                                         col_precio_db: float(precio_costo_nuevo)
                                     }
+                                    
+                                    if "owner_id" in columnas_existentes_st and id_propietario_datos is not None:
+                                        nuevo_registro["owner_id"] = int(id_propietario_datos)
                                     
                                     supabase.table("stock").insert(nuevo_registro).execute()
                                     st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
@@ -603,15 +645,19 @@ else:
                                 st.warning("Por favor, ingresá un nombre para el nuevo insumo.")
 
     # ==========================================
-    # 🎯 METAS DE AHORRO
+    # 🎯 METAS DE AHORRO (AISLADO)
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro y Alcancías")
         
         try:
+            # Traer metas filtrando por owner_id si la columna existe en la tabla de metas
             respuesta_metas = supabase.table("metas").select("*").execute()
             datos_metas = extraer_datos_respuesta(respuesta_metas)
             df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
+            
+            if not df_metas.empty and "owner_id" in df_metas.columns and id_propietario_datos is not None:
+                df_metas = df_metas[df_metas["owner_id"] == id_propietario_datos]
         except Exception as e:
             st.error(f"Error con la tabla metas: {e}")
             df_metas = pd.DataFrame()
@@ -626,11 +672,24 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
                     if nueva_meta_nombre:
                         try:
-                            supabase.table("metas").insert({
+                            # Detectar columnas de metas
+                            res_sample_metas = supabase.table("metas").select("*").limit(1).execute()
+                            datos_sample_metas = extraer_datos_respuesta(res_sample_metas)
+                            
+                            columnas_existentes_metas = []
+                            if datos_sample_metas and len(datos_sample_metas) > 0:
+                                columnas_existentes_metas = list(datos_sample_metas[0].keys())
+                                
+                            nueva_fila_meta = {
                                 "meta": nueva_meta_nombre,
                                 "objetivo": objetivo_monto,
                                 "acumulado": 0.0
-                            }).execute()
+                            }
+                            
+                            if "owner_id" in columnas_existentes_metas and id_propietario_datos is not None:
+                                nueva_fila_meta["owner_id"] = int(id_propietario_datos)
+                                
+                            supabase.table("metas").insert(nueva_fila_meta).execute()
                             st.success(f"¡Alcancía '{nueva_meta_nombre}' creada!")
                             st.cache_data.clear()
                             st.rerun()
@@ -686,7 +745,7 @@ else:
                                 st.rerun()
 
     # ==========================================
-    # 👥 PERSONAL DEL TALLER (PRIVADO MULTI-TENANT & ELIMINAR)
+    # 👥 PERSONAL DEL TALLER
     # ==========================================
     elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
         st.title("👥 Panel de Control de Usuarios y Empleados")
@@ -768,4 +827,4 @@ else:
                                 st.rerun()
                             except Exception as e:
                                 r_err = str(e)
-                                st.error(f"No se pudo eliminar al empleado: {r_err}")
+                                st.error(f"No se pudo eliminar al empleado: {r_err}"
