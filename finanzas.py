@@ -124,7 +124,7 @@ if not st.session_state.get("autenticado", False):
                 else:
                     st.warning("Por favor, completá todos los campos.")
                     
-    # --- TAB REGISTRO DE CUENTA NUEVA ---
+    # --- TAB REGISTRO DE CUENTA NUEVA (CON BLINDAJE DE COLUMNAS) ---
     with tab_registro:
         with st.container(border=True):
             st.markdown("### Registrar nuevo taller")
@@ -142,31 +142,39 @@ if not st.session_state.get("autenticado", False):
                         if datos_check:
                             st.error("⚠️ Este correo electrónico ya está registrado.")
                         else:
-                            # 2. Obtener un usuario de muestra para detectar el nombre real de la columna de contraseña
+                            # 2. Leer un usuario de muestra para detectar qué columnas existen físicamente en tu base de datos
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             
-                            col_pass_detectada = "password"  # Valor por defecto
-                            if datos_sample:
-                                user_sample = datos_sample[0]
-                                for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                    if k in user_sample:
-                                        col_pass_detectada = k
-                                        break
+                            columnas_existentes = []
+                            if datos_sample and len(datos_sample) > 0:
+                                columnas_existentes = list(datos_sample[0].keys())
                             
-                            # 3. Calcular expiración de prueba (14 días exactos desde hoy)
+                            # 3. Detectar dinámicamente el nombre de la columna contraseña
+                            col_pass_detectada = "password"
+                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                if k in columnas_existentes:
+                                    col_pass_detectada = k
+                                    break
+                            
+                            # 4. Calcular expiración de prueba (14 días exactos desde hoy)
                             fecha_expiracion = (datetime.now() + timedelta(days=14)).isoformat()
                             
-                            # 4. Construir el registro dinámicamente con la columna correcta
+                            # 5. Construir el registro de inserción agregando SOLO las columnas que SÍ existen
                             nuevo_admin = {
                                 "email": reg_email,
                                 col_pass_detectada: reg_pass,
                                 "rol": "Admin",
-                                "nombre_taller": reg_taller,
-                                "taller": reg_taller,
                                 "trial_expires_at": fecha_expiracion
                             }
                             
+                            # Añadir el nombre del taller solo en la columna existente para evitar el error PGRST204
+                            if "nombre_taller" in columnas_existentes:
+                                nuevo_admin["nombre_taller"] = reg_taller
+                            elif "taller" in columnas_existentes:
+                                nuevo_admin["taller"] = reg_taller
+                            
+                            # 6. Guardar en Supabase
                             supabase.table("usuarios").insert(nuevo_admin).execute()
                             st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión en la pestaña izquierda. Tu prueba vence el {(datetime.now() + timedelta(days=14)).strftime('%d/%m/%Y')}.")
                     except Exception as e:
@@ -378,7 +386,7 @@ else:
         items_criticos_lista = []
         if not df_stock.empty:
             criticos_df = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
-            if not criticos_df.empty:
+            if not_criticos_df.empty:
                 items_criticos_lista = criticos_df["item"].tolist()
                 
         items_criticos_txt = ", ".join(items_criticos_lista) if items_criticos_lista else "Ninguno (Stock Ok)"
@@ -699,25 +707,35 @@ else:
                 if st.form_submit_button("👥 Guardar Nuevo Miembro"):
                     if nuevo_email_user and nuevo_pass_user:
                         try:
-                            # Detectamos dinámicamente el nombre de la columna contraseña para registrar al empleado
+                            # Detectamos las columnas reales para los empleados
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             
+                            columnas_existentes = []
+                            if datos_sample and len(datos_sample) > 0:
+                                columnas_existentes = list(datos_sample[0].keys())
+                            
                             col_pass_detectada = "password"
-                            if datos_sample:
-                                user_sample = datos_sample[0]
-                                for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                    if k in user_sample:
-                                        col_pass_detectada = k
-                                        break
-                                        
-                            supabase.table("usuarios").insert({
+                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                if k in columnas_existentes:
+                                    col_pass_detectada = k
+                                    break
+                            
+                            # Construimos el diccionario del nuevo empleado de manera dinámica y segura
+                            nuevo_empleado = {
                                 "email": nuevo_email_user,
                                 col_pass_detectada: nuevo_pass_user,
                                 "rol": "Empleado",
-                                "taller": st.session_state.nombre_taller,
                                 "owner_id": int(st.session_state.usuario_id)
-                            }).execute()
+                            }
+                            
+                            # Guardamos el taller en la columna que corresponda para evitar errores
+                            if "nombre_taller" in columnas_existentes:
+                                nuevo_empleado["nombre_taller"] = st.session_state.nombre_taller
+                            elif "taller" in columnas_existentes:
+                                nuevo_empleado["taller"] = st.session_state.nombre_taller
+                                        
+                            supabase.table("usuarios").insert(nuevo_empleado).execute()
                             
                             st.success(f"¡Empleado '{nuevo_email_user}' registrado exitosamente!")
                             st.rerun()
@@ -747,4 +765,5 @@ else:
                                 st.success("¡Empleado eliminado de tu taller!")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"No se pudo eliminar al empleado: {e}")
+                                r_err = str(e)
+                                st.error(f"No se pudo eliminar al empleado: {r_err}")
