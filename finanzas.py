@@ -112,8 +112,8 @@ if not st.session_state.get("autenticado", False):
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.usuario_email = user_data["email"]
                                 st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen")) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
+                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
                                 st.rerun()
                             else:
                                 st.error("Contraseña incorrecta.")
@@ -124,7 +124,7 @@ if not st.session_state.get("autenticado", False):
                 else:
                     st.warning("Por favor, completá todos los campos.")
                     
-    # --- TAB REGISTRO DE CUENTA NUEVA (SaaS - CON PARCHE INTELIGENTE DE COLUMNA) ---
+    # --- TAB REGISTRO DE CUENTA NUEVA ---
     with tab_registro:
         with st.container(border=True):
             st.markdown("### Registrar nuevo taller")
@@ -242,7 +242,7 @@ else:
     # --- MENÚ LATERAL ---
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3061/3061341.png", width=80)
-        st.title(st.session_state.nombre_taller) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+        st.title(st.session_state.nombre_taller)
         st.caption(f"Sesión: **{st.session_state.usuario_email}** ({rol_actual})")
         
         st.markdown("---")
@@ -277,7 +277,7 @@ else:
     # 📊 DASHBOARD GENERAL
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
-        st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+        st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}")
         
         col_c1, col_c2 = st.columns(2)
         with col_c1:
@@ -287,6 +287,7 @@ else:
             st.metric(label="👤 FINANZAS PERSONALES (RETIRO LIBRE)", value=f"$ {billetera_personal:,.2f}")
             st.caption("Dinero extraído neto disponible para tus gastos personales cotidianos.")
             
+        # --- DISTRIBUCIÓN INTERNA RECOMENDADA ---
         st.markdown("---")
         st.markdown("### 💡 Distribución Interna Recomendada")
         
@@ -315,7 +316,7 @@ else:
                 st.download_button(
                     label="📥 Descargar Planilla de Movimientos (Excel/CSV)",
                     data=csv_data,
-                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv", [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -384,16 +385,16 @@ else:
 
         with st.container(border=True):
             st.subheader("📊 Resumen de Datos Enviados")
-            st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+            st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
             st.write(f"🛠️ **Fondos en Caja:** $ {caja_negocio:,.2f}")
             st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
 
         if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
             with st.spinner("🤖 Analizando base de datos..."):
                 historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos"
-                resumen_data = f"Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nHistorial:\n{historial_texto}" [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                resumen_data = f"Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nHistorial:\n{historial_texto}"
                 
-                prompt_expert = f"Actuá como asesor financiero para un taller gráfico en Argentina. Analizá: {resumen_data}. Brindá un diagnóstico corto, directo, en español rioplatense, con 3 tips de rentabilidad clave." [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                prompt_expert = f"Actuá como asesor financiero para un taller gráfico en Argentina. Analizá: {resumen_data}. Brindá un diagnóstico corto, directo, en español rioplatense, con 3 tips de rentabilidad clave."
                 
                 respuesta_ia = consultar_gemini_directo(prompt_expert)
                 st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -489,7 +490,7 @@ else:
                 f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{producto}*\n\n"
                 f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
                 f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
-                f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀" [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
             )
             st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=150)
 
@@ -497,7 +498,7 @@ else:
     # 📉 PUNTO DE EQUILIBRIO
     # ==========================================
     elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
-        st.title("📉 Punto de Equilibrio - Olivia Imagen") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+        st.title("📉 Punto de Equilibrio - Olivia Imagen")
         st.markdown("Conocé con precisión cuánto tenés que facturar para cubrir tus costos fijos y variables mensuales.")
         
         with st.container(border=True):
@@ -714,7 +715,7 @@ else:
                                 "email": nuevo_email_user,
                                 col_pass_detectada: nuevo_pass_user,
                                 "rol": "Empleado",
-                                "taller": st.session_state.nombre_taller, [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                                "taller": st.session_state.nombre_taller,
                                 "owner_id": int(st.session_state.usuario_id)
                             }).execute()
                             
@@ -738,7 +739,7 @@ else:
                         st.markdown(f"📧 **{row['email']}**")
                         st.caption(f"Rol: {row.get('rol', 'Empleado')} | Registrado el: {pd.to_datetime(row.get('created_at')).strftime('%d/%m/%Y')}")
                     with col_emp2:
-                        st.markdown(f"🏢 Taller: **{st.session_state.nombre_taller}**") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                        st.markdown(f"🏢 Taller: **{st.session_state.nombre_taller}**")
                     with col_emp3:
                         if st.button("🗑️", key=f"del_user_{row['id']}", help="Eliminar permanentemente a este empleado"):
                             try:
