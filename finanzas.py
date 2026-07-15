@@ -114,7 +114,7 @@ if not st.session_state.get("autenticado", False):
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.usuario_email = user_data["email"]
                                 st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen")) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
                                 
                                 # Definir el owner_id de la sesión para aislar los datos
                                 if st.session_state.rol == "Admin":
@@ -122,7 +122,7 @@ if not st.session_state.get("autenticado", False):
                                 else:
                                     st.session_state.owner_id = user_data.get("owner_id")
                                     
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
+                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
                                 st.rerun()
                             else:
                                 st.error("Contraseña incorrecta.")
@@ -138,7 +138,7 @@ if not st.session_state.get("autenticado", False):
         with st.container(border=True):
             st.markdown("### Registrar nuevo taller")
             reg_taller = st.text_input("Nombre de tu Emprendimiento/Taller", placeholder="Ej: Mi Taller Gráfico")
-            reg_email = st.text_input("Correo Electrónico del Administrador", placeholder="admin@mitaller.com")
+            reg_email = st.text_input("Correo Electrónico del Administrator", placeholder="admin@mitaller.com")
             reg_pass = st.text_input("Crear Contraseña", type="password", placeholder="Mínimo 6 caracteres")
             
             if st.button("Comenzar Prueba Gratis de 14 Días", type="primary", use_container_width=True):
@@ -206,7 +206,7 @@ else:
     @st.cache_data(ttl=3)
     def cargar_datos_seguro(owner_id_filtro):
         try:
-            # Traer Historial filtrado por owner_id (si tiene la columna, de lo contrario traer todos por compatibilidad)
+            # Traer Historial
             res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
             datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
@@ -560,7 +560,7 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (AISLADO)
+    # 📦 STOCK DE INSUMOS
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -645,13 +645,13 @@ else:
                                 st.warning("Por favor, ingresá un nombre para el nuevo insumo.")
 
     # ==========================================
-    # 🎯 METAS DE AHORRO (AISLADO)
+    # 🎯 METAS DE AHORRO
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro y Alcancías")
         
         try:
-            # Traer metas filtrando por owner_id si la columna existe en la tabla de metas
+            # Traer metas
             respuesta_metas = supabase.table("metas").select("*").execute()
             datos_metas = extraer_datos_respuesta(respuesta_metas)
             df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
@@ -827,4 +827,4 @@ else:
                                 st.rerun()
                             except Exception as e:
                                 r_err = str(e)
-                                st.error(f"No se pudo eliminar al empleado: {r_err}"
+                                st.error(f"No se pudo eliminar al empleado: {r_err}")
