@@ -124,7 +124,7 @@ if not st.session_state.get("autenticado", False):
                 else:
                     st.warning("Por favor, completá todos los campos.")
                     
-    # --- TAB REGISTRO DE CUENTA NUEVA (CON BLINDAJE DE COLUMNAS) ---
+    # --- TAB REGISTRO DE CUENTA NUEVA (CON AUTO-DETECCIÓN DE COLUMNAS DE SEGURIDAD) ---
     with tab_registro:
         with st.container(border=True):
             st.markdown("### Registrar nuevo taller")
@@ -142,7 +142,7 @@ if not st.session_state.get("autenticado", False):
                         if datos_check:
                             st.error("⚠️ Este correo electrónico ya está registrado.")
                         else:
-                            # 2. Leer un usuario de muestra para detectar qué columnas existen físicamente en tu base de datos
+                            # 2. Leer estructura real de la tabla de usuarios en Supabase para evitar PGRST204
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             
@@ -150,33 +150,37 @@ if not st.session_state.get("autenticado", False):
                             if datos_sample and len(datos_sample) > 0:
                                 columnas_existentes = list(datos_sample[0].keys())
                             
-                            # 3. Detectar dinámicamente el nombre de la columna contraseña
+                            # 3. Buscar nombre de columna de contraseña compatible
                             col_pass_detectada = "password"
                             for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
                                 if k in columnas_existentes:
                                     col_pass_detectada = k
                                     break
                             
-                            # 4. Calcular expiración de prueba (14 días exactos desde hoy)
-                            fecha_expiracion = (datetime.now() + timedelta(days=14)).isoformat()
-                            
-                            # 5. Construir el registro de inserción agregando SOLO las columnas que SÍ existen
+                            # 4. Construir registro agregando SOLO columnas físicamente presentes en la DB
                             nuevo_admin = {
                                 "email": reg_email,
                                 col_pass_detectada: reg_pass,
-                                "rol": "Admin",
-                                "trial_expires_at": fecha_expiracion
+                                "rol": "Admin"
                             }
                             
-                            # Añadir el nombre del taller solo en la columna existente para evitar el error PGRST204
+                            # Guardamos la fecha de expiración únicamente si la columna existe en tu Supabase
+                            if "trial_expires_at" in columnas_existentes:
+                                fecha_expiracion = (datetime.now() + timedelta(days=14)).isoformat()
+                                nuevo_admin["trial_expires_at"] = fecha_expiracion
+                                mensaje_vto = f" Tu prueba vence el {(datetime.now() + timedelta(days=14)).strftime('%d/%m/%Y')}."
+                            else:
+                                mensaje_vto = " (Acceso ilimitado activado)."
+                            
+                            # Guardamos el taller según la columna que tengas disponible
                             if "nombre_taller" in columnas_existentes:
                                 nuevo_admin["nombre_taller"] = reg_taller
                             elif "taller" in columnas_existentes:
                                 nuevo_admin["taller"] = reg_taller
                             
-                            # 6. Guardar en Supabase
+                            # 5. Guardar en Supabase
                             supabase.table("usuarios").insert(nuevo_admin).execute()
-                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión en la pestaña izquierda. Tu prueba vence el {(datetime.now() + timedelta(days=14)).strftime('%d/%m/%Y')}.")
+                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión en la pestaña izquierda.{mensaje_vto}")
                     except Exception as e:
                         st.error(f"Error al registrar la cuenta: {e}")
                 else:
@@ -386,7 +390,7 @@ else:
         items_criticos_lista = []
         if not df_stock.empty:
             criticos_df = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
-            if not_criticos_df.empty:
+            if not criticos_df.empty:
                 items_criticos_lista = criticos_df["item"].tolist()
                 
         items_criticos_txt = ", ".join(items_criticos_lista) if items_criticos_lista else "Ninguno (Stock Ok)"
@@ -721,7 +725,6 @@ else:
                                     col_pass_detectada = k
                                     break
                             
-                            # Construimos el diccionario del nuevo empleado de manera dinámica y segura
                             nuevo_empleado = {
                                 "email": nuevo_email_user,
                                 col_pass_detectada: nuevo_pass_user,
@@ -729,7 +732,6 @@ else:
                                 "owner_id": int(st.session_state.usuario_id)
                             }
                             
-                            # Guardamos el taller en la columna que corresponda para evitar errores
                             if "nombre_taller" in columnas_existentes:
                                 nuevo_empleado["nombre_taller"] = st.session_state.nombre_taller
                             elif "taller" in columnas_existentes:
