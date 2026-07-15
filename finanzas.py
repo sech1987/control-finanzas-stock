@@ -209,57 +209,107 @@ else:
             st.rerun()
 
     # ==========================================
-    # 📊 DASHBOARD GENERAL (SÓLO ADMIN)
+    # 📊 DASHBOARD GENERAL (RESTAURADO CON FONDOS, PORCENTAJES Y GRÁFICO)
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title("📊 Control de Mando - Olivia Imagen")
         
         col_c1, col_c2 = st.columns(2)
         with col_c1:
-            st.metric(label="💼 Caja del Negocio", value=f"$ {caja_negocio:,.2f}")
+            st.metric(label="💼 FONDOS DISPONIBLES EMPRENDIMIENTO", value=f"$ {caja_negocio:,.2f}")
+            st.caption("Capital total activo en la caja operativa de tu taller.")
         with col_c2:
-            st.metric(label="👤 Billetera Personal (Tus Retiros)", value=f"$ {billetera_personal:,.2f}")
+            st.metric(label="👤 FINANZAS PERSONALES (RETIRO LIBRE)", value=f"$ {billetera_personal:,.2f}")
+            st.caption("Dinero extraído neto disponible para tus gastos personales cotidianos.")
+            
+        # --- 💡 DISTRIBUCIÓN INTERNA RECOMENDADA (CON TUS NUEVOS PORCENTAJES) ---
+        st.markdown("---")
+        st.markdown("### 💡 Distribución Interna Recomendada")
+        
+        caja_insumos_calc = caja_negocio * 0.35
+        caja_sueldos_calc = caja_negocio * 0.55
+        caja_mantenimiento_calc = caja_negocio * 0.10
+        
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            st.metric(label="📦 CAJA INSUMOS (35%)", value=f"$ {caja_insumos_calc:,.2f}")
+        with col_p2:
+            st.metric(label="💸 CAJA SUELDOS (55%)", value=f"$ {caja_sueldos_calc:,.2f}")
+        with col_p3:
+            st.metric(label="🔧 MANTENIMIENTO (10%)", value=f"$ {caja_mantenimiento_calc:,.2f}")
             
         st.markdown("---")
-        st.subheader("📈 Últimos Movimientos Generales")
         
-        if df_historial.empty:
-            st.info("No hay transacciones registradas.")
-        else:
-            columnas_a_mostrar = ["fecha", "tipo"]
-            if col_desc_detectada in df_historial.columns:
-                columnas_a_mostrar.append(col_desc_detectada)
-            columnas_a_mostrar.append("monto")
-            
-            # Mostramos la tabla interactiva
-            st.dataframe(
-                df_historial[columnas_a_mostrar].head(15),
-                use_container_width=True
-            )
-            
-            # --- 📥 GENERADOR Y BOTÓN DE DESCARGA EXCEL (NUEVO) ---
-            try:
-                # Creamos un archivo Excel en memoria usando Pandas y BytesIO
-                output = io.BytesIO()
-                # Copiamos el dataframe limpio para descargar entero
-                df_exportar = df_historial[columnas_a_mostrar].copy()
-                # Formateamos la fecha a texto simple para evitar problemas de formato en Excel
+        # --- 📥 DESCARGA EXCEL E HISTORIAL ---
+        if not df_historial.empty:
+            col_exp1, col_exp2 = st.columns([1, 1])
+            with col_exp1:
+                st.markdown("### 📥 Exportar Historial Completo")
+                # Generación del archivo CSV exportable
+                df_exportar = df_historial.copy()
                 df_exportar["fecha"] = df_exportar["fecha"].dt.strftime('%Y-%m-%d %H:%M:%S')
-                
-                # Guardamos como un archivo CSV separado por comas con codificación UTF-8 para que Excel lo abra perfecto
                 csv_data = df_exportar.to_csv(index=False, encoding="utf-8-sig")
                 
-                st.markdown("<br>", unsafe_allow_html=True)
                 st.download_button(
-                    label="📥 Descargar todos los Movimientos (Excel/CSV)",
+                    label="📥 Descargar Planilla de Movimientos (Excel/CSV)",
                     data=csv_data,
                     file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
-                    use_container_width=True,
-                    help="Hacé clic para bajar la planilla completa en formato CSV compatible con Microsoft Excel."
+                    use_container_width=True
                 )
-            except Exception as ex_b:
-                st.warning(f"No se pudo preparar el archivo de descarga: {ex_b}")
+                
+            # --- 📅 FILTRO DE PERÍODO (RESTAURADO) ---
+            with col_exp2:
+                st.markdown("### 📅 Seleccionar Período")
+                df_historial["periodo"] = df_historial["fecha"].dt.strftime('%Y-%m')
+                periodos_disponibles = sorted(df_historial["periodo"].unique(), reverse=True)
+                periodo_seleccionado = st.selectbox("Mes de Análisis:", periodos_disponibles)
+                
+                # Filtramos el dataframe para gráficos e historial según el mes
+                df_filtrado_mes = df_historial[df_historial["periodo"] == periodo_seleccionado]
+            
+            # --- 📈 GRÁFICO DE BALANCE FINANCIERO MENSUAL (RESTAURADO) ---
+            st.markdown("---")
+            st.subheader(f"📊 Balance Financiero Mensual ({periodo_seleccionado})")
+            
+            ingresos_mes = df_filtrado_mes[df_filtrado_mes["tipo"] == "Ingreso"]["monto"].sum()
+            egresos_mes = df_filtrado_mes[df_filtrado_mes["tipo"].isin(["Gasto Negocio", "Retiro Sueldo", "Gasto Personal"])]["monto"].sum()
+            
+            df_chart = pd.DataFrame({
+                "Categoría": ["Gastos / Egresos", "Ventas / Ingresos"],
+                "Monto ($)": [egresos_mes, ingresos_mes]
+            })
+            st.bar_chart(data=df_chart, x="Categoría", y="Monto ($)", color="#ff4b4b", use_container_width=True)
+            
+            # --- 📋 TARJETAS DE MOVIMIENTOS DETALLADOS CON BOTÓN ELIMINAR (RESTAURADO) ---
+            st.markdown("---")
+            st.subheader("📋 Lista Detallada de Movimientos")
+            
+            for idx, row in df_filtrado_mes.iterrows():
+                # Color y símbolo según tipo
+                color_card = "#2ecc71" if row["tipo"] == "Ingreso" else "#e74c3c"
+                simbolo = "➕" if row["tipo"] == "Ingreso" else "➖"
+                
+                with st.container(border=True):
+                    col_t1, col_t2, col_t3 = st.columns([5, 3, 1])
+                    
+                    with col_t1:
+                        st.markdown(f"**{simbolo} {row['tipo']}** - {row[col_desc_detectada]}")
+                        st.caption(f"📅 Fecha: {row['fecha'].strftime('%Y-%m-%d %H:%M:%S')}")
+                    with col_t2:
+                        st.markdown(f"<h3 style='margin:0; color:{color_card};'>$ {row['monto']:,.2f}</h3>", unsafe_allow_html=True)
+                    with col_t3:
+                        # Botón de eliminar individual
+                        if st.button("🗑️", key=f"del_h_{row['id']}"):
+                            try:
+                                supabase.table("historial").delete().eq("id", int(row["id"])).execute()
+                                st.success("¡Movimiento eliminado!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al borrar: {e}")
+        else:
+            st.info("No hay transacciones registradas.")
 
     # ==========================================
     # 🤖 CONSULTOR IA
@@ -295,7 +345,7 @@ else:
                 st.markdown(respuesta_ia)
 
     # ==========================================
-    # 📝 NUEVA OPERACIÓN
+    # 📝 NUEVA OPERACIÓN (REGISTRO COMPLETO COMO EL VIDEO)
     # ==========================================
     elif seccion == "📝 Nueva Operación":
         st.title("📝 Registrar Nueva Operación")
@@ -348,10 +398,13 @@ else:
                     st.warning("Por favor, ingresá una descripción para guardar la operación.")
 
     # ==========================================
-    # 🧮 CALCULADORA DE COSTOS
+    # 🧮 CALCULADORA DE COSTOS (VISTA CLIENTE)
     # ==========================================
     elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
         st.title("🧮 Calculadora de Costos Gráficos")
+        
+        # Switch de vista de cliente
+        vista_cliente = st.toggle("Modo Vista Cliente (Ocultar Costos y Ganancias)", value=False)
         
         with st.container(border=True):
             col_e1, col_e2 = st.columns(2)
@@ -370,9 +423,13 @@ else:
             ganancia_neta = precio_sugerido - costo_total
             
             st.markdown("---")
-            col_r1, col_r2 = st.columns(2)
-            col_r1.metric("💰 PRECIO RECOMENDADO", f"$ {precio_sugerido:,.2f}")
-            col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {ganancia_neta:,.2f}")
+            if vista_cliente:
+                # Ocultamos la ganancia neta para mostrar al cliente
+                st.metric("💰 PRECIO PRESUPUESTADO sugerido", f"$ {precio_sugerido:,.2f}")
+            else:
+                col_r1, col_r2 = st.columns(2)
+                col_r1.metric("💰 PRECIO RECOMENDADO", f"$ {precio_sugerido:,.2f}")
+                col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {ganancia_neta:,.2f}")
             
             st.markdown("---")
             texto_presupuesto = (
@@ -407,7 +464,7 @@ else:
             st.info(f"💡 **Explicación sencilla:** Para cubrir tus costos fijos de **$ {costos_fijos_fijos:,.2f}**, necesitás facturar al menos **$ {punto_equilibrio_pesos:,.2f}** en el mes. A partir de esa cifra, cada peso que ingresa al taller es ganancia neta.")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS
+    # 📦 STOCK DE INSUMOS (CON ALTA DE CATEGORÍAS)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -562,7 +619,7 @@ else:
                             if st.button("🗑️", key=f"del_meta_{row['id']}"):
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                                 st.cache_data.clear()
-                                rerun()
+                                st.rerun()
 
     # ==========================================
     # 👥 PERSONAL DEL TALLER
