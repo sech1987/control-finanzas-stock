@@ -583,7 +583,7 @@ else:
             
             porcentaje_ganancia = st.slider("Margen de Ganancia (%)", min_value=10, max_value=200, value=50, step=5)
             
-            mano_obra = horas_diseno * value_hora if 'value_hora' in locals() else horas_diseno * valor_hora
+            mano_obra = horas_diseno * valor_hora
             costo_total = costo_fijo + mano_obra
             precio_sugerido = costo_total * (1 + (porcentaje_ganancia / 100))
             ganancia_neta = precio_sugerido - costo_total
@@ -627,13 +627,14 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (RECONSTRUIDO Y COMPLETO)
+    # 📦 STOCK DE INSUMOS (REESTRUCTURADO SIN BLOQUEOS)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
         
+        # 1. Mostrar la tabla si hay elementos
         if df_stock.empty:
-            st.info("No hay insumos en el inventario.")
+            st.info("💡 Aún no tenés ningún insumo registrado en tu inventario. Podés empezar agregando uno nuevo en la pestaña de abajo.")
         else:
             df_stock["Alerta"] = df_stock.apply(
                 lambda r: "🔴 Reponer Ya" if r["cantidad"] <= r["minimo"] else "🟢 OK", axis=1
@@ -646,11 +647,20 @@ else:
             
             st.dataframe(df_stock[columnas_mostrar], use_container_width=True)
             
-            if rol_actual == "Admin":
-                st.markdown("---")
+        # 2. SECCIÓN DE GESTIÓN (Siempre visible para Administradores, sin importar si la tabla superior está vacía o no)
+        if rol_actual == "Admin":
+            st.markdown("---")
+            
+            # Ajustamos dinámicamente las pestañas según si hay elementos para modificar o no
+            if not df_stock.empty:
                 tab_ajustar, tab_crear_categoria = st.tabs(["✏️ Ajustar Cantidades / Costos", "🆕 Crear Nuevo Insumo / Categoría"])
-                
-                # --- TABLA DE AJUSTE (CORREGIDA CON BOTÓN DE ENVÍO E INPUT DE COSTO) ---
+            else:
+                # Si la tabla está vacía, solo dejamos activa la pestaña para crear y no confundir al usuario
+                tab_crear_categoria, = st.tabs(["🆕 Crear Nuevo Insumo / Categoría"])
+                tab_ajustar = None
+            
+            # --- TABLA DE AJUSTE (Si corresponde) ---
+            if tab_ajustar is not None:
                 with tab_ajustar:
                     with st.form("form_ajuste_stock", clear_on_submit=False):
                         st.subheader("Modificar Existencias y Costos")
@@ -668,10 +678,8 @@ else:
                         nuevo_costo_item = col_s3.number_input("Actualizar Precio de Costo ($)", min_value=0.0, step=50.0, value=costo_actual_val)
                         punto_minimo_editar = col_s4.number_input("Punto Mínimo de Alerta", min_value=0, step=1, value=int(datos_item_actual.get("minimo", 5)))
                         
-                        # ¡BOTÓN RESTAURADO E HIGHLIGHTED!
                         if st.form_submit_button("💾 Guardar Cambios en Insumo", use_container_width=True, type="primary"):
                             try:
-                                # Resolver nombre de columna costo de manera adaptativa
                                 res_sample_st = supabase.table("stock").select("*").limit(1).execute()
                                 datos_sample_st = extraer_datos_respuesta(res_sample_st)
                                 columnas_existentes_st = list(datos_sample_st[0].keys()) if datos_sample_st else []
@@ -695,52 +703,52 @@ else:
                             except Exception as e:
                                 st.error(f"Error al modificar el stock: {e}")
                                 
-                # --- TABLA DE CREACIÓN ---
-                with tab_crear_categoria:
-                    with st.form("form_crear_insumo", clear_on_submit=True):
-                        st.subheader("Registrar Insumo Nuevo en la Base")
-                        col_crea1, col_crea2 = st.columns(2)
-                        nuevo_nombre_item = col_crea1.text_input("Nombre del Insumo / Categoría (Ej: Vinilo Holográfico)")
-                        precio_costo_nuevo = col_crea2.number_input("Precio de Costo Inicial ($)", min_value=0.0, step=100.0)
-                        
-                        col_crea3, col_crea4 = st.columns(2)
-                        cantidad_inicial_nueva = col_crea3.number_input("Stock Inicial", min_value=0, step=1)
-                        minimo_alerta_nuevo = col_crea4.number_input("Punto de Reorden Mínimo", min_value=0, step=1, value=5)
-                        
-                        if st.form_submit_button("💾 Guardar Insumo Nuevo", use_container_width=True):
-                            if nuevo_nombre_item:
-                                try:
-                                    res_sample_st = supabase.table("stock").select("*").limit(1).execute()
-                                    datos_sample_st = extraer_datos_respuesta(res_sample_st)
+            # --- TABLA DE CREACIÓN DE INSUMOS (SIEMPRE DISPONIBLE) ---
+            with tab_crear_categoria:
+                with st.form("form_crear_insumo", clear_on_submit=True):
+                    st.subheader("Registrar Insumo Nuevo en la Base")
+                    col_crea1, col_crea2 = st.columns(2)
+                    nuevo_nombre_item = col_crea1.text_input("Nombre del Insumo / Categoría (Ej: Vinilo Holográfico)")
+                    precio_costo_nuevo = col_crea2.number_input("Precio de Costo Inicial ($)", min_value=0.0, step=100.0)
+                    
+                    col_crea3, col_crea4 = st.columns(2)
+                    cantidad_inicial_nueva = col_crea3.number_input("Stock Inicial", min_value=0, step=1)
+                    minimo_alerta_nuevo = col_crea4.number_input("Punto de Reorden Mínimo", min_value=0, step=1, value=5)
+                    
+                    if st.form_submit_button("💾 Guardar Insumo Nuevo", use_container_width=True, type="primary"):
+                        if nuevo_nombre_item:
+                            try:
+                                res_sample_st = supabase.table("stock").select("*").limit(1).execute()
+                                datos_sample_st = extraer_datos_respuesta(res_sample_st)
+                                
+                                columnas_existentes_st = []
+                                if datos_sample_st and len(datos_sample_st) > 0:
+                                    columnas_existentes_st = list(datos_sample_st[0].keys())
                                     
-                                    columnas_existentes_st = []
-                                    if datos_sample_st and len(datos_sample_st) > 0:
-                                        columnas_existentes_st = list(datos_sample_st[0].keys())
-                                        
-                                    col_precio_db = "precio_costo"
-                                    for c in ["precio_costo", "precio", "costo", "valor_costo"]:
-                                        if c in columnas_existentes_st:
-                                            col_precio_db = c
-                                            break
-                                    
-                                    nuevo_registro = {
-                                        "item": nuevo_nombre_item,
-                                        "cantidad": int(cantidad_inicial_nueva),
-                                        "minimo": int(minimo_alerta_nuevo),
-                                        col_precio_db: float(precio_costo_nuevo)
-                                    }
-                                    
-                                    if "owner_id" in columnas_existentes_st and id_propietario_datos is not None:
-                                        nuevo_registro["owner_id"] = int(id_propietario_datos)
-                                    
-                                    supabase.table("stock").insert(nuevo_registro).execute()
-                                    st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error al registrar insumo: {e}")
-                            else:
-                                st.warning("Por favor, ingresá un nombre para el nuevo insumo.")
+                                col_precio_db = "precio_costo"
+                                for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                                    if c in columnas_existentes_st:
+                                        col_precio_db = c
+                                        break
+                                
+                                nuevo_registro = {
+                                    "item": nuevo_nombre_item,
+                                    "cantidad": int(cantidad_inicial_nueva),
+                                    "minimo": int(minimo_alerta_nuevo),
+                                    col_precio_db: float(precio_costo_nuevo)
+                                }
+                                
+                                if "owner_id" in columnas_existentes_st and id_propietario_datos is not None:
+                                    nuevo_registro["owner_id"] = int(id_propietario_datos)
+                                
+                                supabase.table("stock").insert(nuevo_registro).execute()
+                                st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al registrar insumo: {e}")
+                        else:
+                            st.warning("Por favor, ingresá un nombre para el nuevo insumo.")
 
     # ==========================================
     # 🎯 METAS DE AHORRO
