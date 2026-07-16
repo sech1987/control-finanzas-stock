@@ -114,7 +114,7 @@ if not st.session_state.get("autenticado", False):
                                 st.session_state.usuario_id = user_data["id"]
                                 st.session_state.usuario_email = user_data["email"]
                                 st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
+                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen")) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                                 
                                 # Definir el owner_id de la sesión para aislar los datos
                                 if st.session_state.rol == "Admin":
@@ -122,7 +122,7 @@ if not st.session_state.get("autenticado", False):
                                 else:
                                     st.session_state.owner_id = user_data.get("owner_id")
                                     
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
+                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                                 st.rerun()
                             else:
                                 st.error("Contraseña incorrecta.")
@@ -133,12 +133,12 @@ if not st.session_state.get("autenticado", False):
                 else:
                     st.warning("Por favor, completá todos los campos.")
                     
-    # --- TAB REGISTRO DE CUENTA NUEVA (CON AUTO-DETECCIÓN DE COLUMNAS DE SEGURIDAD) ---
+    # --- TAB REGISTRO DE CUENTA NUEVA ---
     with tab_registro:
         with st.container(border=True):
             st.markdown("### Registrar nuevo taller")
             reg_taller = st.text_input("Nombre de tu Emprendimiento/Taller", placeholder="Ej: Mi Taller Gráfico")
-            reg_email = st.text_input("Correo Electrónico del Administrator", placeholder="admin@mitaller.com")
+            reg_email = st.text_input("Correo Electrónico del Administrador", placeholder="admin@mitaller.com")
             reg_pass = st.text_input("Crear Contraseña", type="password", placeholder="Mínimo 6 caracteres")
             
             if st.button("Comenzar Prueba Gratis de 14 Días", type="primary", use_container_width=True):
@@ -202,31 +202,33 @@ else:
     # ID del dueño de los datos actuales (para aislar por completo cada cuenta)
     id_propietario_datos = st.session_state.get("owner_id")
 
-    # --- CARGAR DATOS DESDE SUPABASE AISLADOS ---
+    # --- CARGAR DATOS DESDE SUPABASE AISLADOS DESDE LA CONSULTA ---
     @st.cache_data(ttl=3)
     def cargar_datos_seguro(owner_id_filtro):
         try:
-            # Traer Historial
-            res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
+            # Traer Historial filtrado de forma estricta por owner_id
+            if owner_id_filtro is not None:
+                res_historial = supabase.table("historial").select("*").eq("owner_id", owner_id_filtro).order("fecha", desc=True).execute()
+            else:
+                res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
+                
             datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
             
             if not df_hist_tmp.empty:
-                # Filtrar si la columna 'owner_id' existe físicamente en el historial
-                if "owner_id" in df_hist_tmp.columns and owner_id_filtro is not None:
-                    df_hist_tmp = df_hist_tmp[df_hist_tmp["owner_id"] == owner_id_filtro]
                 df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
                 df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
                 
-            # Traer Stock
-            res_stock = supabase.table("stock").select("*").execute()
+            # Traer Stock filtrado de forma estricta por owner_id
+            if owner_id_filtro is not None:
+                res_stock = supabase.table("stock").select("*").eq("owner_id", owner_id_filtro).execute()
+            else:
+                res_stock = supabase.table("stock").select("*").execute()
+                
             datos_stock = extraer_datos_respuesta(res_stock)
             df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
             
             if not df_stock_tmp.empty:
-                # Filtrar si la columna 'owner_id' existe en la tabla de stock
-                if "owner_id" in df_stock_tmp.columns and owner_id_filtro is not None:
-                    df_stock_tmp = df_stock_tmp[df_stock_tmp["owner_id"] == owner_id_filtro]
                 df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
                 df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
                 
@@ -273,7 +275,7 @@ else:
     # --- MENÚ LATERAL ---
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3061/3061341.png", width=80)
-        st.title(st.session_state.nombre_taller)
+        st.title(st.session_state.nombre_taller) [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
         st.caption(f"Sesión: **{st.session_state.usuario_email}** ({rol_actual})")
         
         st.markdown("---")
@@ -309,7 +311,7 @@ else:
     # 📊 DASHBOARD GENERAL
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
-        st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}")
+        st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
         
         col_c1, col_c2 = st.columns(2)
         with col_c1:
@@ -348,7 +350,7 @@ else:
                 st.download_button(
                     label="📥 Descargar Planilla de Movimientos (Excel/CSV)",
                     data=csv_data,
-                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv", [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -410,23 +412,23 @@ else:
         items_criticos_lista = []
         if not df_stock.empty:
             criticos_df = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
-            if not criticos_df.empty:
+            if not_criticos_df.empty:
                 items_criticos_lista = criticos_df["item"].tolist()
                 
         items_criticos_txt = ", ".join(items_criticos_lista) if items_criticos_lista else "Ninguno (Stock Ok)"
 
         with st.container(border=True):
             st.subheader("📊 Resumen de Datos Enviados")
-            st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}")
+            st.write(f"🏢 **Taller Activo:** {st.session_state.nombre_taller}") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
             st.write(f"🛠️ **Fondos en Caja:** $ {caja_negocio:,.2f}")
             st.write(f"👤 **Caja Personal:** $ {billetera_personal:,.2f}")
 
         if st.button("🚀 Generar Diagnóstico con IA", type="primary", use_container_width=True):
             with st.spinner("🤖 Analizando base de datos..."):
                 historial_texto = df_historial.tail(15).to_string() if not df_historial.empty else "Sin movimientos"
-                resumen_data = f"Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nHistorial:\n{historial_texto}"
+                resumen_data = f"Taller: {st.session_state.nombre_taller}\nCaja Negocio: ${caja_negocio:.2f}\nCaja Personal: ${billetera_personal:.2f}\nHistorial:\n{historial_texto}" [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                 
-                prompt_expert = f"Actuá como asesor financiero para un taller gráfico en Argentina. Analizá: {resumen_data}. Brindá un diagnóstico corto, directo, en español rioplatense, con 3 tips de rentabilidad clave."
+                prompt_expert = f"Actuá como asesor financiero para un taller gráfico en Argentina. Analizá: {resumen_data}. Brindá un diagnóstico corto, directo, en español rioplatense, con 3 tips de rentabilidad clave." [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                 
                 respuesta_ia = consultar_gemini_directo(prompt_expert)
                 st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -534,7 +536,7 @@ else:
                 f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{producto}*\n\n"
                 f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
                 f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
-                f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
+                f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀" [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
             )
             st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=150)
 
@@ -542,7 +544,7 @@ else:
     # 📉 PUNTO DE EQUILIBRIO
     # ==========================================
     elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
-        st.title("📉 Punto de Equilibrio - Olivia Imagen")
+        st.title("📉 Punto de Equilibrio - Olivia Imagen") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
         st.markdown("Conocé con precisión cuánto tenés que facturar para cubrir tus costos fijos y variables mensuales.")
         
         with st.container(border=True):
@@ -651,13 +653,14 @@ else:
         st.title("🎯 Metas de Ahorro y Alcancías")
         
         try:
-            # Traer metas
-            respuesta_metas = supabase.table("metas").select("*").execute()
+            # Traer metas filtrando por owner_id de forma directa
+            if id_propietario_datos is not None:
+                respuesta_metas = supabase.table("metas").select("*").eq("owner_id", id_propietario_datos).execute()
+            else:
+                respuesta_metas = supabase.table("metas").select("*").execute()
+                
             datos_metas = extraer_datos_respuesta(respuesta_metas)
             df_metas = pd.DataFrame(datos_metas) if datos_metas else pd.DataFrame()
-            
-            if not df_metas.empty and "owner_id" in df_metas.columns and id_propietario_datos is not None:
-                df_metas = df_metas[df_metas["owner_id"] == id_propietario_datos]
         except Exception as e:
             st.error(f"Error con la tabla metas: {e}")
             df_metas = pd.DataFrame()
@@ -672,7 +675,6 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
                     if nueva_meta_nombre:
                         try:
-                            # Detectar columnas de metas
                             res_sample_metas = supabase.table("metas").select("*").limit(1).execute()
                             datos_sample_metas = extraer_datos_respuesta(res_sample_metas)
                             
@@ -742,7 +744,7 @@ else:
                             if st.button("🗑️", key=f"del_meta_{row['id']}"):
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                                 st.cache_data.clear()
-                                st.rerun()
+                                rerun()
 
     # ==========================================
     # 👥 PERSONAL DEL TALLER
@@ -818,7 +820,7 @@ else:
                         st.markdown(f"📧 **{row['email']}**")
                         st.caption(f"Rol: {row.get('rol', 'Empleado')} | Registrado el: {pd.to_datetime(row.get('created_at')).strftime('%d/%m/%Y')}")
                     with col_emp2:
-                        st.markdown(f"🏢 Taller: **{st.session_state.nombre_taller}**")
+                        st.markdown(f"🏢 Taller: **{st.session_state.nombre_taller}**") [cite: professional in the graphic design and printing industry and operates a business named Olivia Imagen. Evidence: Explicit declaration of owning "un emprendimiento of grafica llamado olivia imagen" and frequent technical inquiries regarding CorelDRAW, Silhouette plotters, and vectorization. Conversation Date: 2025-10 to 2026-02.]
                     with col_emp3:
                         if st.button("🗑️", key=f"del_user_{row['id']}", help="Eliminar permanentemente a este empleado"):
                             try:
