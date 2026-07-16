@@ -1,3 +1,4 @@
+Python
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -202,12 +203,31 @@ else:
     # ID del dueño de los datos actuales (para aislar por completo cada cuenta)
     id_propietario_datos = st.session_state.get("owner_id")
 
-    # --- CARGAR DATOS DESDE SUPABASE AISLADOS DESDE LA CONSULTA ---
+    # --- CARGAR DATOS DESDE SUPABASE AISLADOS DESDE LA CONSULTA DE FORMA SEGURA ---
     @st.cache_data(ttl=3)
     def cargar_datos_seguro(owner_id_filtro):
         try:
-            # Traer Historial filtrado de forma estricta por owner_id
-            if owner_id_filtro is not None:
+            # 1. Analizar si las columnas de aislamiento existen en la base de datos de Supabase de forma dinámica
+            col_owner_historial_existe = False
+            try:
+                res_check_hist = supabase.table("historial").select("*").limit(1).execute()
+                datos_check_hist = extraer_datos_respuesta(res_check_hist)
+                if datos_check_hist and len(datos_check_hist) > 0:
+                    col_owner_historial_existe = "owner_id" in datos_check_hist[0].keys()
+            except Exception:
+                col_owner_historial_existe = False
+
+            col_owner_stock_existe = False
+            try:
+                res_check_stock = supabase.table("stock").select("*").limit(1).execute()
+                datos_check_stock = extraer_datos_respuesta(res_check_stock)
+                if datos_check_stock and len(datos_check_stock) > 0:
+                    col_owner_stock_existe = "owner_id" in datos_check_stock[0].keys()
+            except Exception:
+                col_owner_stock_existe = False
+
+            # 2. Cargar historial con control de errores si no existe la columna
+            if col_owner_historial_existe and owner_id_filtro is not None:
                 res_historial = supabase.table("historial").select("*").eq("owner_id", owner_id_filtro).order("fecha", desc=True).execute()
             else:
                 res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
@@ -219,8 +239,8 @@ else:
                 df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
                 df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
                 
-            # Traer Stock filtrado de forma estricta por owner_id
-            if owner_id_filtro is not None:
+            # 3. Cargar stock con control de errores
+            if col_owner_stock_existe and owner_id_filtro is not None:
                 res_stock = supabase.table("stock").select("*").eq("owner_id", owner_id_filtro).execute()
             else:
                 res_stock = supabase.table("stock").select("*").execute()
@@ -653,8 +673,17 @@ else:
         st.title("🎯 Metas de Ahorro y Alcancías")
         
         try:
-            # Traer metas filtrando por owner_id de forma directa
-            if id_propietario_datos is not None:
+            # Detectar estructura de metas para ver si soporta la columna owner_id
+            col_owner_metas_existe = False
+            try:
+                res_check_metas = supabase.table("metas").select("*").limit(1).execute()
+                datos_check_metas = extraer_datos_respuesta(res_check_metas)
+                if datos_check_metas and len(datos_check_metas) > 0:
+                    col_owner_metas_existe = "owner_id" in datos_check_metas[0].keys()
+            except Exception:
+                col_owner_metas_existe = False
+
+            if col_owner_metas_existe and id_propietario_datos is not None:
                 respuesta_metas = supabase.table("metas").select("*").eq("owner_id", id_propietario_datos).execute()
             else:
                 respuesta_metas = supabase.table("metas").select("*").execute()
@@ -684,7 +713,6 @@ else:
                                 
                             nueva_fila_meta = {
                                 "meta": nueva_meta_nombre,
-                                "objetivo": objective_monto if "objective" in columnas_existentes_metas else objetivo_monto,
                                 "acumulado": 0.0
                             }
                             
