@@ -231,7 +231,7 @@ else:
             else:
                 res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
                 
-            datos_historial = extraer_datos_respuesta(res_historial)
+                datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
             
             if not df_hist_tmp.empty:
@@ -454,7 +454,7 @@ else:
                 st.markdown(respuesta_ia)
 
     # ==========================================
-    # 📝 NUEVA OPERACIÓN (CON TEXTO DE WHATSAPP RESTAURADO)
+    # 📝 NUEVA OPERACIÓN
     # ==========================================
     elif seccion == "📝 Nueva Operación":
         st.title("📝 Registrar Nueva Operación")
@@ -474,7 +474,6 @@ else:
             
         tipo_op = st.selectbox("Tipo de Movimiento", opciones)
         
-        # Guardar en sesión temporal los datos para el mensaje de WhatsApp si es una venta
         if "datos_ultimo_envio" not in st.session_state:
             st.session_state.datos_ultimo_envio = None
 
@@ -494,7 +493,6 @@ else:
                         tipo_db = "Gasto Personal"
                     
                     try:
-                        # 1. Analizar dinámicamente qué columnas existen físicamente en la tabla 'historial'
                         res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
                         datos_sample_hist = extraer_datos_respuesta(res_sample_hist)
                         
@@ -502,8 +500,7 @@ else:
                         if datos_sample_hist and len(datos_sample_hist) > 0:
                             columnas_existentes_hist = list(datos_sample_hist[0].keys())
                         
-                        # 2. Identificar la columna de descripción correcta en la base para que no dé el error PGRST204
-                        col_destino_desc = "descripcion" # valor por defecto
+                        col_destino_desc = "descripcion"
                         for c in ["descripción", "descripcion", "detalle", "concepto"]:
                             if c in columnas_existentes_hist:
                                 col_destino_desc = c
@@ -516,14 +513,12 @@ else:
                         }
                         fila_insertar[col_destino_desc] = desc_op
                         
-                        # Inyectar el ID de aislamiento si la columna existe en la base
                         if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None:
                             fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
                         st.success("¡Operación registrada con éxito!")
                         
-                        # Si es una venta, preparamos la plantilla de WhatsApp para enviar al cliente
                         if tipo_db == "Ingreso":
                             st.session_state.datos_ultimo_envio = {
                                 "detalle": desc_op,
@@ -538,15 +533,13 @@ else:
                 else:
                     st.warning("Por favor, ingresá una descripción.")
 
-        # --- 🟢 BLOQUE DE ENVÍO DE MENSAJE DE WHATSAPP (Aparece abajo al registrar una venta exitosa) ---
         if st.session_state.datos_ultimo_envio:
             st.markdown("---")
             st.subheader("📲 ¡Venta registrada! Generar ticket para enviar por WhatsApp")
             
             with st.container(border=True):
-                tel_cliente = st.text_input("Número de WhatsApp del Cliente (con código de área sin el 15, ej: 5491122334455)", placeholder="Ej: 5493412345678")
+                tel_cliente = st.text_input("Número de WhatsApp del Cliente", placeholder="Ej: 5493412345678")
                 
-                # Armado del texto de agradecimiento
                 t_detalle = st.session_state.datos_ultimo_envio["detalle"]
                 t_monto = st.session_state.datos_ultimo_envio["monto"]
                 
@@ -559,9 +552,7 @@ else:
                 
                 st.text_area("Texto a enviar:", value=texto_whatsapp, height=140)
                 
-                # Botón de redirección directa a WhatsApp Web/App
                 if tel_cliente:
-                    # Reemplazar espacios y caracteres para URL
                     texto_url = requests.utils.quote(texto_whatsapp)
                     enlace_wp = f"https://wa.me/{tel_cliente}?text={texto_url}"
                     
@@ -636,7 +627,7 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS
+    # 📦 STOCK DE INSUMOS (FORMULARIO RESTAURADO)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -685,7 +676,8 @@ else:
                         cantidad_inicial_nueva = col_crea3.number_input("Stock Inicial", min_value=0, step=1)
                         minimo_alerta_nuevo = col_crea4.number_input("Punto de Reorden Mínimo", min_value=0, step=1, value=5)
                         
-                        if st.form_submit_button("💾 Guardar Insumo Nuevo"):
+                        # Botón de envío que procesa el formulario restaurado
+                        if st.form_submit_button("💾 Guardar Insumo Nuevo", use_container_width=True):
                             if nuevo_nombre_item:
                                 try:
                                     res_sample_st = supabase.table("stock").select("*").limit(1).execute()
@@ -727,7 +719,6 @@ else:
         st.title("🎯 Metas de Ahorro y Alcancías")
         
         try:
-            # Detectar estructura de metas para ver si soporta la columna owner_id
             col_owner_metas_existe = False
             try:
                 res_check_metas = supabase.table("metas").select("*").limit(1).execute()
@@ -770,7 +761,6 @@ else:
                                 "acumulado": 0.0
                             }
                             
-                            # Validar columna objetivo en español/inglés dinámicamente
                             if "objetivo" in columnas_existentes_metas:
                                 nueva_fila_meta["objetivo"] = objetivo_monto
                             elif "objective" in columnas_existentes_metas:
@@ -860,7 +850,6 @@ else:
                 if st.form_submit_button("👥 Guardar Nuevo Miembro"):
                     if nuevo_email_user and nuevo_pass_user:
                         try:
-                            # Detectamos las columnas reales para los empleados
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             
