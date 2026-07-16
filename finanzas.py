@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -455,7 +454,7 @@ else:
                 st.markdown(respuesta_ia)
 
     # ==========================================
-    # 📝 NUEVA OPERACIÓN
+    # 📝 NUEVA OPERACIÓN (CON TEXTO DE WHATSAPP RESTAURADO)
     # ==========================================
     elif seccion == "📝 Nueva Operación":
         st.title("📝 Registrar Nueva Operación")
@@ -475,10 +474,14 @@ else:
             
         tipo_op = st.selectbox("Tipo de Movimiento", opciones)
         
-        with st.form("form_nueva_operacion", clear_on_submit=True):
+        # Guardar en sesión temporal los datos para el mensaje de WhatsApp si es una venta
+        if "datos_ultimo_envio" not in st.session_state:
+            st.session_state.datos_ultimo_envio = None
+
+        with st.form("form_nueva_operacion", clear_on_submit=False):
             col_o1, col_o2 = st.columns(2)
             monto_op = col_o1.number_input("Monto ($)", min_value=1.0, step=100.0)
-            desc_op = col_o2.text_input("Detalle / Concepto")
+            desc_op = col_o2.text_input("Detalle / Concepto (Ej: Venta de Remera, Vinilos)")
             
             if st.form_submit_button("💾 Guardar Operación", use_container_width=True):
                 if desc_op:
@@ -491,7 +494,7 @@ else:
                         tipo_db = "Gasto Personal"
                     
                     try:
-                        # 1. Detectar estructura para ver si historial maneja la columna de aislamiento
+                        # 1. Analizar dinámicamente qué columnas existen físicamente en la tabla 'historial'
                         res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
                         datos_sample_hist = extraer_datos_respuesta(res_sample_hist)
                         
@@ -499,25 +502,76 @@ else:
                         if datos_sample_hist and len(datos_sample_hist) > 0:
                             columnas_existentes_hist = list(datos_sample_hist[0].keys())
                         
+                        # 2. Identificar la columna de descripción correcta en la base para que no dé el error PGRST204
+                        col_destino_desc = "descripcion" # valor por defecto
+                        for c in ["descripción", "descripcion", "detalle", "concepto"]:
+                            if c in columnas_existentes_hist:
+                                col_destino_desc = c
+                                break
+                        
                         fila_insertar = {
                             "fecha": datetime.now().isoformat(),
                             "tipo": tipo_db,
                             "monto": monto_op
                         }
-                        fila_insertar[col_desc_detectada] = desc_op
+                        fila_insertar[col_destino_desc] = desc_op
                         
-                        # Inyectamos el ID del propietario si la columna ya está creada
+                        # Inyectar el ID de aislamiento si la columna existe en la base
                         if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None:
                             fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
                         st.success("¡Operación registrada con éxito!")
+                        
+                        # Si es una venta, preparamos la plantilla de WhatsApp para enviar al cliente
+                        if tipo_db == "Ingreso":
+                            st.session_state.datos_ultimo_envio = {
+                                "detalle": desc_op,
+                                "monto": monto_op
+                            }
+                        else:
+                            st.session_state.datos_ultimo_envio = None
+
                         st.cache_data.clear()
-                        st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
                 else:
                     st.warning("Por favor, ingresá una descripción.")
+
+        # --- 🟢 BLOQUE DE ENVÍO DE MENSAJE DE WHATSAPP (Aparece abajo al registrar una venta exitosa) ---
+        if st.session_state.datos_ultimo_envio:
+            st.markdown("---")
+            st.subheader("📲 ¡Venta registrada! Generar ticket para enviar por WhatsApp")
+            
+            with st.container(border=True):
+                tel_cliente = st.text_input("Número de WhatsApp del Cliente (con código de área sin el 15, ej: 5491122334455)", placeholder="Ej: 5493412345678")
+                
+                # Armado del texto de agradecimiento
+                t_detalle = st.session_state.datos_ultimo_envio["detalle"]
+                t_monto = st.session_state.datos_ultimo_envio["monto"]
+                
+                texto_whatsapp = (
+                    f"¡Hola! Te pasamos el comprobante de tu compra en *{st.session_state.nombre_taller}* 🛍️\n\n"
+                    f"📌 *Detalle:* {t_detalle}\n"
+                    f"💰 *Monto Abonado:* $ {t_monto:,.2f}\n\n"
+                    f"¡Muchas gracias por elegirnos! Cualquier duda estamos a disposición. 🚀"
+                )
+                
+                st.text_area("Texto a enviar:", value=texto_whatsapp, height=140)
+                
+                # Botón de redirección directa a WhatsApp Web/App
+                if tel_cliente:
+                    # Reemplazar espacios y caracteres para URL
+                    texto_url = requests.utils.quote(texto_whatsapp)
+                    enlace_wp = f"https://wa.me/{tel_cliente}?text={texto_url}"
+                    
+                    st.markdown(
+                        f'<a href="{enlace_wp}" target="_blank">'
+                        f'<button style="background-color: #25D366; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">'
+                        f'🟢 Enviar Comprobante por WhatsApp'
+                        f'</button></a>',
+                        unsafe_allow_html=True
+                    )
 
     # ==========================================
     # 🧮 CALCULADORA DE COSTOS
