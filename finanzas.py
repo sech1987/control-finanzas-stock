@@ -583,7 +583,7 @@ else:
             
             porcentaje_ganancia = st.slider("Margen de Ganancia (%)", min_value=10, max_value=200, value=50, step=5)
             
-            mano_obra = horas_diseno * valor_hora
+            mano_obra = horas_diseno * value_hora if 'value_hora' in locals() else horas_diseno * valor_hora
             costo_total = costo_fijo + mano_obra
             precio_sugerido = costo_total * (1 + (porcentaje_ganancia / 100))
             ganancia_neta = precio_sugerido - costo_total
@@ -627,7 +627,7 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS
+    # 📦 STOCK DE INSUMOS (RECONSTRUIDO Y COMPLETO)
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -648,25 +648,56 @@ else:
             
             if rol_actual == "Admin":
                 st.markdown("---")
-                tab_ajustar, tab_crear_categoria = st.tabs(["✏️ Ajustar Cantidades", "🆕 Crear Nuevo Insumo / Categoría"])
+                tab_ajustar, tab_crear_categoria = st.tabs(["✏️ Ajustar Cantidades / Costos", "🆕 Crear Nuevo Insumo / Categoría"])
                 
+                # --- TABLA DE AJUSTE (CORREGIDA CON BOTÓN DE ENVÍO E INPUT DE COSTO) ---
                 with tab_ajustar:
-                    with st.form("form_ajuste_stock"):
+                    with st.form("form_ajuste_stock", clear_on_submit=False):
+                        st.subheader("Modificar Existencias y Costos")
                         col_s1, col_s2 = st.columns(2)
                         item_seleccionado = col_s1.selectbox("Insumo a modificar", df_stock["item"].tolist())
-                        nueva_cantidad = col_s2.number_input("Nueva Cantidad en Stock (Entero)", min_value=0, step=1, value=0)
                         
-                        if st.form_submit_button("⚙️ Actualizar Stock"):
+                        # Buscar datos actuales del item para precargar los inputs
+                        datos_item_actual = df_stock[df_stock["item"] == item_seleccionado].iloc[0]
+                        cant_actual_val = int(datos_item_actual.get("cantidad", 0))
+                        costo_actual_val = float(datos_item_actual.get("precio_costo", 0.0))
+                        
+                        nueva_cantidad = col_s2.number_input("Nueva Cantidad en Stock (Físico)", min_value=0, step=1, value=cant_actual_val)
+                        
+                        col_s3, col_s4 = st.columns(2)
+                        nuevo_costo_item = col_s3.number_input("Actualizar Precio de Costo ($)", min_value=0.0, step=50.0, value=costo_actual_val)
+                        punto_minimo_editar = col_s4.number_input("Punto Mínimo de Alerta", min_value=0, step=1, value=int(datos_item_actual.get("minimo", 5)))
+                        
+                        # ¡BOTÓN RESTAURADO E HIGHLIGHTED!
+                        if st.form_submit_button("💾 Guardar Cambios en Insumo", use_container_width=True, type="primary"):
                             try:
-                                supabase.table("stock").update({"cantidad": int(nueva_cantidad)}).eq("item", item_seleccionado).execute()
-                                st.success(f"¡Stock de {item_seleccionado} actualizado a {int(nueva_cantidad)}!")
+                                # Resolver nombre de columna costo de manera adaptativa
+                                res_sample_st = supabase.table("stock").select("*").limit(1).execute()
+                                datos_sample_st = extraer_datos_respuesta(res_sample_st)
+                                columnas_existentes_st = list(datos_sample_st[0].keys()) if datos_sample_st else []
+                                
+                                col_precio_db = "precio_costo"
+                                for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                                    if c in columnas_existentes_st:
+                                        col_precio_db = c
+                                        break
+                                
+                                datos_actualizados = {
+                                    "cantidad": int(nueva_cantidad),
+                                    "minimo": int(punto_minimo_editar),
+                                    col_precio_db: float(nuevo_costo_item)
+                                }
+                                
+                                supabase.table("stock").update(datos_actualizados).eq("item", item_seleccionado).execute()
+                                st.success(f"¡Insumo {item_seleccionado} actualizado correctamente!")
                                 st.cache_data.clear()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error al modificar el stock: {e}")
                                 
+                # --- TABLA DE CREACIÓN ---
                 with tab_crear_categoria:
-                    with st.form("form_crear_insumo"):
+                    with st.form("form_crear_insumo", clear_on_submit=True):
                         st.subheader("Registrar Insumo Nuevo en la Base")
                         col_crea1, col_crea2 = st.columns(2)
                         nuevo_nombre_item = col_crea1.text_input("Nombre del Insumo / Categoría (Ej: Vinilo Holográfico)")
