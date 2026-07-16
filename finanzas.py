@@ -231,7 +231,7 @@ else:
             else:
                 res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
                 
-                datos_historial = extraer_datos_respuesta(res_historial)
+            datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
             
             if not df_hist_tmp.empty:
@@ -627,7 +627,7 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (FORMULARIO RESTAURADO)
+    # 📦 STOCK DE INSUMOS
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -676,7 +676,6 @@ else:
                         cantidad_inicial_nueva = col_crea3.number_input("Stock Inicial", min_value=0, step=1)
                         minimo_alerta_nuevo = col_crea4.number_input("Punto de Reorden Mínimo", min_value=0, step=1, value=5)
                         
-                        # Botón de envío que procesa el formulario restaurado
                         if st.form_submit_button("💾 Guardar Insumo Nuevo", use_container_width=True):
                             if nuevo_nombre_item:
                                 try:
