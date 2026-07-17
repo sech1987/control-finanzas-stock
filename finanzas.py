@@ -586,7 +586,6 @@ else:
             if df_stock.empty:
                 st.info("💡 Tip: Si cargas tus materiales en 'Stock de Insumos', acá vas a poder seleccionarlos del menú para sumarlos de un tirón.")
             else:
-                # Selector dinámico de materiales
                 lista_items = df_stock["item"].tolist()
                 col_sel_ins, col_sel_cant = st.columns([3, 1])
                 
@@ -594,12 +593,10 @@ else:
                 cant_a_presupuestar = col_sel_cant.number_input("Cant. a usar", min_value=0.01, value=1.0, step=1.0, format="%.2f")
                 
                 if st.button("➕ Agregar Insumo al Presupuesto", use_container_width=True):
-                    # Obtener costo unitario
                     datos_material = df_stock[df_stock["item"] == item_a_presupuestar].iloc[0]
                     costo_unitario = float(datos_material.get("precio_costo", 0.0))
                     subtotal_insumo = cant_a_presupuestar * costo_unitario
                     
-                    # Agregar a sesión
                     st.session_state.insumos_presupuesto.append({
                         "item": item_a_presupuestar,
                         "cantidad": cant_a_presupuestar,
@@ -608,12 +605,10 @@ else:
                     })
                     st.rerun()
             
-            # Tabla de materiales añadidos
             if st.session_state.insumos_presupuesto:
                 df_insumos_calc = pd.DataFrame(st.session_state.insumos_presupuesto)
                 
                 st.markdown("**Desglose de Materiales Cargados:**")
-                # Mostrar lista con opción de borrar individualmente
                 for idx_ins, item_row in df_insumos_calc.iterrows():
                     with st.container(border=True):
                         col_rname, col_rsub, col_rbtn = st.columns([5, 3, 1])
@@ -623,7 +618,6 @@ else:
                             st.session_state.insumos_presupuesto.pop(idx_ins)
                             st.rerun()
                 
-                # Sumar el costo acumulado
                 total_acumulado_insumos = df_insumos_calc["subtotal"].sum()
                 st.metric("Total Acumulado Materiales", f"$ {total_acumulado_insumos:,.2f}")
                 
@@ -641,8 +635,7 @@ else:
             with st.container(border=True):
                 producto = st.text_input("Nombre del Trabajo / Producto", value="Trabajo Personalizado")
                 
-                # Precargar el total acumulado si existen insumos añadidos en la izquierda
-                costo_fijo = st.number_input("Costos de Insumos ($)", min_value=0.0, value=total_acumulado_insumos, step=100.0, help="Se completa de forma automática con la sumatoria de la izquierda.")
+                costo_fijo = st.number_input("Costos de Insumos ($)", min_value=0.0, value=total_acumulado_insumos, step=100.0)
                 
                 col_e3, col_e4 = st.columns(2)
                 horas_diseno = col_e3.number_input("Horas de Trabajo", min_value=0.0, step=0.1)
@@ -778,33 +771,46 @@ else:
                     if st.form_submit_button("💾 Guardar Insumo Nuevo", use_container_width=True, type="primary"):
                         if nuevo_nombre_item:
                             try:
-                                res_sample_st = supabase.table("stock").select("*").limit(1).execute()
-                                datos_sample_st = extraer_datos_respuesta(res_sample_st)
+                                # --- BLINDAJE DE DUPLICADOS PARA LA CUENTA OPERANTE ---
+                                res_dup_check = supabase.table("stock").select("*").eq("item", nuevo_nombre_item).execute()
+                                datos_dup = extraer_datos_respuesta(res_dup_check)
                                 
-                                columnas_existentes_st = []
-                                if datos_sample_st and len(datos_sample_st) > 0:
-                                    columnas_existentes_st = list(datos_sample_st[0].keys())
-                                    
-                                col_precio_db = "precio_costo"
-                                for c in ["precio_costo", "precio", "costo", "valor_costo"]:
-                                    if c in columnas_existentes_st:
-                                        col_precio_db = c
+                                # Si ya existe el insumo para este taller (owner_id)
+                                duplicado_detectado = False
+                                for d in datos_dup:
+                                    owner_db = d.get("owner_id")
+                                    if (owner_db is None and id_propietario_datos is None) or (str(owner_db) == str(id_propietario_datos)):
+                                        duplicado_detectado = True
                                         break
                                 
-                                nuevo_registro = {
-                                    "item": nuevo_nombre_item,
-                                    "cantidad": int(cantidad_inicial_nueva),
-                                    "minimo": int(minimo_alerta_nuevo),
-                                    col_precio_db: float(precio_costo_nuevo)
-                                }
-                                
-                                if "owner_id" in columnas_existentes_st and id_propietario_datos is not None:
-                                    nuevo_registro["owner_id"] = int(id_propietario_datos)
-                                
-                                supabase.table("stock").insert(nuevo_registro).execute()
-                                st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
-                                st.cache_data.clear()
-                                st.rerun()
+                                if duplicado_detectado:
+                                    st.warning(f"⚠️ El insumo '{nuevo_nombre_item}' ya existe en tu catálogo de stock. Podés editar su cantidad o costo en la pestaña 'Ajustar Cantidades / Costos'.")
+                                else:
+                                    res_sample_st = supabase.table("stock").select("*").limit(1).execute()
+                                    datos_sample_st = extraer_datos_respuesta(res_sample_st)
+                                    
+                                    columnas_existentes_st = list(datos_sample_st[0].keys()) if datos_sample_st else []
+                                        
+                                    col_precio_db = "precio_costo"
+                                    for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                                        if c in columnas_existentes_st:
+                                            col_precio_db = c
+                                            break
+                                    
+                                    nuevo_registro = {
+                                        "item": nuevo_nombre_item,
+                                        "cantidad": int(cantidad_inicial_nueva),
+                                        "minimo": int(minimo_alerta_nuevo),
+                                        col_precio_db: float(precio_costo_nuevo)
+                                    }
+                                    
+                                    if "owner_id" in columnas_existentes_st and id_propietario_datos is not None:
+                                        nuevo_registro["owner_id"] = int(id_propietario_datos)
+                                    
+                                    supabase.table("stock").insert(nuevo_registro).execute()
+                                    st.success(f"¡Insumo '{nuevo_nombre_item}' cargado con éxito en Supabase!")
+                                    st.cache_data.clear()
+                                    st.rerun()
                             except Exception as e:
                                 st.error(f"Error al registrar insumo: {e}")
                         else:
