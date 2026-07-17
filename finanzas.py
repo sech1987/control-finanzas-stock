@@ -21,6 +21,10 @@ if "usuario_id" not in st.session_state:
 if "owner_id" not in st.session_state:
     st.session_state.owner_id = None
 
+# Inicializar lista dinámica de insumos para el presupuesto actual
+if "insumos_presupuesto" not in st.session_state:
+    st.session_state.insumos_presupuesto = []
+
 # --- CONEXIÓN A SUPABASE ---
 from supabase import create_client, Client
 
@@ -565,45 +569,108 @@ else:
                     )
 
     # ==========================================
-    # 🧮 CALCULADORA DE COSTOS
+    # 🧮 CALCULADORA DE COSTOS (CONECTADA AL STOCK)
     # ==========================================
     elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
-        st.title("🧮 Calculadora de Costos Gráficos")
+        st.title("🧮 Calculadora de Costos Inteligente")
+        st.markdown("Planifica presupuestos sumando insumos del stock y calculando tu mano de obra al toque.")
         
         vista_cliente = st.toggle("Modo Vista Cliente (Ocultar Costos y Ganancias)", value=False)
         
-        with st.container(border=True):
-            col_e1, col_e2 = st.columns(2)
-            producto = col_e1.text_input("Nombre del Trabajo", value="Trabajo Personalizado")
-            costo_fijo = col_e2.number_input("Costos de Insumos ($)", min_value=0.0, step=100.0)
+        col_calc_izq, col_calc_der = st.columns([1, 1])
+        
+        # --- COLUMNA IZQUIERDA: DOCK DE MATERIALES (LA MEJORA) ---
+        with col_calc_izq:
+            st.subheader("📦 Insumos del Trabajo")
             
-            col_e3, col_e4 = st.columns(2)
-            horas_diseno = col_e3.number_input("Horas de Trabajo", min_value=0.0, step=0.1)
-            valor_hora = col_e4.number_input("Valor Hora ($)", min_value=0.0, value=2500.0, step=100.0)
-            
-            porcentaje_ganancia = st.slider("Margen de Ganancia (%)", min_value=10, max_value=200, value=50, step=5)
-            
-            mano_obra = horas_diseno * valor_hora
-            costo_total = costo_fijo + mano_obra
-            precio_sugerido = costo_total * (1 + (porcentaje_ganancia / 100))
-            ganancia_neta = precio_sugerido - costo_total
-            
-            st.markdown("---")
-            if vista_cliente:
-                st.metric("💰 PRECIO PRESUPUESTADO sugerido", f"$ {precio_sugerido:,.2f}")
+            if df_stock.empty:
+                st.info("💡 Tip: Si cargas tus materiales en 'Stock de Insumos', acá vas a poder seleccionarlos del menú para sumarlos de un tirón.")
             else:
-                col_r1, col_r2 = st.columns(2)
-                col_r1.metric("💰 PRECIO RECOMENDADO", f"$ {precio_sugerido:,.2f}")
-                col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {ganancia_neta:,.2f}")
+                # Selector dinámico de materiales
+                lista_items = df_stock["item"].tolist()
+                col_sel_ins, col_sel_cant = st.columns([3, 1])
+                
+                item_a_presupuestar = col_sel_ins.selectbox("Seleccionar Insumo:", lista_items)
+                cant_a_presupuestar = col_sel_cant.number_input("Cant. a usar", min_value=0.01, value=1.0, step=1.0, format="%.2f")
+                
+                if st.button("➕ Agregar Insumo al Presupuesto", use_container_width=True):
+                    # Obtener costo unitario
+                    datos_material = df_stock[df_stock["item"] == item_a_presupuestar].iloc[0]
+                    costo_unitario = float(datos_material.get("precio_costo", 0.0))
+                    subtotal_insumo = cant_a_presupuestar * costo_unitario
+                    
+                    # Agregar a sesión
+                    st.session_state.insumos_presupuesto.append({
+                        "item": item_a_presupuestar,
+                        "cantidad": cant_a_presupuestar,
+                        "costo_unit": costo_unitario,
+                        "subtotal": subtotal_insumo
+                    })
+                    st.rerun()
             
-            st.markdown("---")
-            texto_presupuesto = (
-                f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{producto}*\n\n"
-                f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
-                f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
-                f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
-            )
-            st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=150)
+            # Tabla de materiales añadidos
+            if st.session_state.insumos_presupuesto:
+                df_insumos_calc = pd.DataFrame(st.session_state.insumos_presupuesto)
+                
+                st.markdown("**Desglose de Materiales Cargados:**")
+                # Mostrar lista con opción de borrar individualmente
+                for idx_ins, item_row in df_insumos_calc.iterrows():
+                    with st.container(border=True):
+                        col_rname, col_rsub, col_rbtn = st.columns([5, 3, 1])
+                        col_rname.markdown(f"**{item_row['item']}** (x{item_row['cantidad']:.2f})")
+                        col_rsub.markdown(f"$ {item_row['subtotal']:,.2f}")
+                        if col_rbtn.button("🗑️", key=f"del_ins_calc_{idx_ins}"):
+                            st.session_state.insumos_presupuesto.pop(idx_ins)
+                            st.rerun()
+                
+                # Sumar el costo acumulado
+                total_acumulado_insumos = df_insumos_calc["subtotal"].sum()
+                st.metric("Total Acumulado Materiales", f"$ {total_acumulado_insumos:,.2f}")
+                
+                if st.button("🧹 Limpiar todos los materiales", use_container_width=True):
+                    st.session_state.insumos_presupuesto = []
+                    st.rerun()
+            else:
+                total_acumulado_insumos = 0.0
+                st.caption("No agregaste materiales todavía. Podés cargarlos arriba o escribir el costo de forma manual al lado.")
+                
+        # --- COLUMNA DERECHA: CALCULADORA DE PRECIO FINAL ---
+        with col_calc_der:
+            st.subheader("💰 Cálculo de Precio Final")
+            
+            with st.container(border=True):
+                producto = st.text_input("Nombre del Trabajo / Producto", value="Trabajo Personalizado")
+                
+                # Precargar el total acumulado si existen insumos añadidos en la izquierda
+                costo_fijo = st.number_input("Costos de Insumos ($)", min_value=0.0, value=total_acumulado_insumos, step=100.0, help="Se completa de forma automática con la sumatoria de la izquierda.")
+                
+                col_e3, col_e4 = st.columns(2)
+                horas_diseno = col_e3.number_input("Horas de Trabajo", min_value=0.0, step=0.1)
+                valor_hora = col_e4.number_input("Valor Hora ($)", min_value=0.0, value=2500.0, step=100.0)
+                
+                porcentaje_ganancia = st.slider("Margen de Ganancia (%)", min_value=10, max_value=200, value=50, step=5)
+                
+                mano_obra = horas_diseno * valor_hora
+                costo_total = costo_fijo + mano_obra
+                precio_sugerido = costo_total * (1 + (porcentaje_ganancia / 100))
+                ganancia_neta = precio_sugerido - costo_total
+                
+                st.markdown("---")
+                if vista_cliente:
+                    st.metric("💰 PRECIO PRESUPUESTADO sugerido", f"$ {precio_sugerido:,.2f}")
+                else:
+                    col_r1, col_r2 = st.columns(2)
+                    col_r1.metric("💰 PRECIO RECOMENDADO", f"$ {precio_sugerido:,.2f}")
+                    col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {ganancia_neta:,.2f}")
+                
+                st.markdown("---")
+                texto_presupuesto = (
+                    f"¡Hola! Te paso el presupuesto detallado para tu trabajo: *{producto}*\n\n"
+                    f"📌 *Detalle:* Servicio de diseño y producción personalizada.\n"
+                    f"💰 *Valor Total:* $ {precio_sugerido:,.2f}\n\n"
+                    f"¡Cualquier duda me avisás y lo coordinamos! Muchas gracias por confiar en *{st.session_state.nombre_taller}* 🚀"
+                )
+                st.text_area("Presupuesto para copiar:", value=texto_presupuesto, height=130)
 
     # ==========================================
     # 📉 PUNTO DE EQUILIBRIO
@@ -627,12 +694,11 @@ else:
             col_eqr2.metric("📊 Margen de Contribución Real", f"{porcentaje_margen * 100:.1f} %")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (REESTRUCTURADO SIN BLOQUEOS)
+    # 📦 STOCK DE INSUMOS
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
         
-        # 1. Mostrar la tabla si hay elementos
         if df_stock.empty:
             st.info("💡 Aún no tenés ningún insumo registrado en tu inventario. Podés empezar agregando uno nuevo en la pestaña de abajo.")
         else:
@@ -647,19 +713,15 @@ else:
             
             st.dataframe(df_stock[columnas_mostrar], use_container_width=True)
             
-        # 2. SECCIÓN DE GESTIÓN (Siempre visible para Administradores, sin importar si la tabla superior está vacía o no)
         if rol_actual == "Admin":
             st.markdown("---")
             
-            # Ajustamos dinámicamente las pestañas según si hay elementos para modificar o no
             if not df_stock.empty:
                 tab_ajustar, tab_crear_categoria = st.tabs(["✏️ Ajustar Cantidades / Costos", "🆕 Crear Nuevo Insumo / Categoría"])
             else:
-                # Si la tabla está vacía, solo dejamos activa la pestaña para crear y no confundir al usuario
                 tab_crear_categoria, = st.tabs(["🆕 Crear Nuevo Insumo / Categoría"])
                 tab_ajustar = None
             
-            # --- TABLA DE AJUSTE (Si corresponde) ---
             if tab_ajustar is not None:
                 with tab_ajustar:
                     with st.form("form_ajuste_stock", clear_on_submit=False):
@@ -667,7 +729,6 @@ else:
                         col_s1, col_s2 = st.columns(2)
                         item_seleccionado = col_s1.selectbox("Insumo a modificar", df_stock["item"].tolist())
                         
-                        # Buscar datos actuales del item para precargar los inputs
                         datos_item_actual = df_stock[df_stock["item"] == item_seleccionado].iloc[0]
                         cant_actual_val = int(datos_item_actual.get("cantidad", 0))
                         costo_actual_val = float(datos_item_actual.get("precio_costo", 0.0))
@@ -703,7 +764,6 @@ else:
                             except Exception as e:
                                 st.error(f"Error al modificar el stock: {e}")
                                 
-            # --- TABLA DE CREACIÓN DE INSUMOS (SIEMPRE DISPONIBLE) ---
             with tab_crear_categoria:
                 with st.form("form_crear_insumo", clear_on_submit=True):
                     st.subheader("Registrar Insumo Nuevo en la Base")
