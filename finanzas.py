@@ -579,7 +579,7 @@ else:
         
         col_calc_izq, col_calc_der = st.columns([1, 1])
         
-        # --- COLUMNA IZQUIERDA: DOCK DE MATERIALES (LA MEJORA) ---
+        # --- COLUMNA IZQUIERDA: DOCK DE MATERIALES ---
         with col_calc_izq:
             st.subheader("📦 Insumos del Trabajo")
             
