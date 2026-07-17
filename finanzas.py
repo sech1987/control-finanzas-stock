@@ -276,28 +276,28 @@ else:
 
     rol_actual = st.session_state.get("rol", "Empleado")
 
-    # --- MENÚ LATERAL ---
+   # --- MENÚ LATERAL ---
     with st.sidebar:
         # --- LOGO DINÁMICO ---
         if st.session_state.logo_taller is not None:
-            st.image(st.session_state.logo_taller, width=90)
+            st.image(st.session_state.logo_taller, width=100)
         else:
-            st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=90)
+            st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
             
         st.title(st.session_state.nombre_taller)
         st.caption(f"Sesión: **{st.session_state.usuario_email}** ({rol_actual})")
         
-        # Cargador de marco de logo personalizado
-        archivo_logo = st.file_saver = st.file_uploader("🖼️ Cambiar imagen corporativa/logo", type=["png", "jpg", "jpeg"], key="uploader_logo_emp")
-        if archivo_logo is not None:
-            try:
-                img_logo = Image.open(archivo_logo)
-                # Forzar formato cuadrado estético
-                img_logo = img_logo.resize((300, 300))
-                st.session_state.logo_taller = img_logo
-                st.rerun()
-            except Exception:
-                pass
+        # --- CONFIGURACIÓN DE LOGO OCULTA EN EXPANDER ---
+        with st.expander("⚙️ Configurar Logo"):
+            archivo_logo = st.file_uploader("Subir imagen (PNG/JPG)", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
+            if archivo_logo is not None:
+                try:
+                    img_logo = Image.open(archivo_logo)
+                    img_logo = img_logo.resize((300, 300))
+                    st.session_state.logo_taller = img_logo
+                    st.rerun()
+                except Exception:
+                    pass
 
         st.markdown("---")
         
