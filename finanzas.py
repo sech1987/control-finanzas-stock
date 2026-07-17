@@ -640,32 +640,24 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True):
                     if nueva_meta_nombre:
                         try:
+                            # Forzar lectura limpia de columnas existentes
                             res_m = supabase.table("metas").select("*").limit(1).execute()
-                            cols_m = list(extraer_datos_respuesta(res_m)[0].keys()) if extraer_datos_respuesta(res_m) else []
-                            obj_col = "objetivo" if "objetivo" in cols_m else "objective"
+                            datos_m = extraer_datos_respuesta(res_m)
+                            cols_m = list(datos_m[0].keys()) if datos_m else []
+                            
+                            obj_col = "objetivo"
+                            for c in ["objetivo", "objective", "monto_objetivo"]:
+                                if c in cols_m:
+                                    obj_col = c
+                                    break
+                                    
                             n_meta = {"meta": nueva_meta_nombre, "acumulado": 0.0, obj_col: objetivo_monto}
                             if "owner_id" in cols_m and id_propietario_datos is not None: n_meta["owner_id"] = int(id_propietario_datos)
+                            
                             supabase.table("metas").insert(n_meta).execute()
+                            st.success("¡Alcancía creada con éxito!")
                             st.cache_data.clear(); st.rerun()
-                        except Exception as e: st.error(f"Error: {e}")
-
-        if not df_metas.empty:
-            for idx, row in df_metas.iterrows():
-                with st.container(border=True):
-                    obj = float(row['objective'] if 'objective' in row else row['objetivo'])
-                    acum = float(row.get('acumulado', 0.0))
-                    col_m1, col_m2, col_m3 = st.columns([4, 3, 2])
-                    col_m1.markdown(f"🎯 **{row['meta']}**")
-                    col_m1.progress(min(1.0, acum / obj) if obj > 0 else 0.0)
-                    col_m2.markdown(f"**Acumulado:** $ {acum:,.2f} / $ {obj:,.2f}")
-                    monto_ahorrar = col_m3.number_input("Sumar/Restar:", value=0.0, key=f"add_m_{row['id']}")
-                    if col_m3.button("💾", key=f"btn_s_m_{row['id']}"):
-                        if acum + monto_ahorrar >= 0:
-                            supabase.table("metas").update({"acumulado": acum + monto_ahorrar}).eq("id", int(row["id"])).execute()
-                            st.cache_data.clear(); st.rerun()
-                    if col_m3.button("🗑️", key=f"del_m_{row['id']}"):
-                        supabase.table("metas").delete().eq("id", int(row["id"])).execute()
-                        st.cache_data.clear(); st.rerun()
+                        except Exception as e: st.error(f"Error al registrar meta: {e}")
 
     # ==========================================
     # 👥 PERSONAL DEL TALLER
@@ -685,20 +677,22 @@ else:
                 if st.form_submit_button("👥 Guardar Nuevo Miembro"):
                     if n_email and n_pass:
                         try:
+                            # Forzar lectura limpia de columnas existentes
                             res_s = supabase.table("usuarios").select("*").limit(1).execute()
-                            cols_u = list(extraer_datos_respuesta(res_s)[0].keys()) if extraer_datos_respuesta(res_s) else []
-                            col_p_det = "password"
-                            for k in ["password", "contraseña", "clave"]:
-                                if k in cols_u: col_p_det = k; break
+                            datos_s = extraer_datos_respuesta(res_s)
+                            cols_u = list(datos_s[0].keys()) if datos_s else []
+                            
+                            col_p_det = "contraseña"
+                            for k in ["contraseña", "contrasena", "password", "clave", "pass"]:
+                                if k in cols_u: 
+                                    col_p_det = k
+                                    break
+                                    
                             emp = {"email": n_email, col_p_det: n_pass, "rol": "Empleado", "owner_id": int(st.session_state.usuario_id)}
                             if "nombre_taller" in cols_u: emp["nombre_taller"] = st.session_state.nombre_taller
-                            supabase.table("usuarios").insert(emp).execute(); st.rerun()
-                        except Exception as e: st.error(f"Error: {e}")
-                        
-        if not df_usuarios_db.empty:
-            for idx, row in df_usuarios_db.iterrows():
-                with st.container(border=True):
-                    col_e1, col_e2 = st.columns([8, 1])
-                    col_e1.markdown(f"📧 **{row['email']}** (Empleado)")
-                    if col_e2.button("🗑️", key=f"del_u_{row['id']}"):
-                        supabase.table("usuarios").delete().eq("id", int(row["id"])).execute(); st.rerun()
+                            elif "taller" in cols_u: emp["taller"] = st.session_state.nombre_taller
+                            
+                            supabase.table("usuarios").insert(emp).execute()
+                            st.success("¡Miembro del equipo registrado!")
+                            st.rerun()
+                        except Exception as e: st.error(f"Error al registrar usuario: {e}")
