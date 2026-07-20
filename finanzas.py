@@ -628,15 +628,15 @@ else:
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro")
         
-        # Cargar metas de forma segura filtrando por el dueño de casa
+        # Cargar metas de forma segura
         try:
             res_metas = supabase.table("metas").select("*").execute()
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
-            # Si la tabla tiene la columna owner_id, filtramos para este usuario para mantener el SaaS aislado
             if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
-                df_metas = df_metas_tmp[df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
+                # Traer metas del usuario actual o las que quedaron en NULL/vacias
+                df_metas = df_metas_tmp[(df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)) | (df_metas_tmp["owner_id"].isna())]
             else:
                 df_metas = df_metas_tmp
         except Exception:
@@ -652,45 +652,46 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True, type="primary"):
                     if nueva_meta_nombre:
                         try:
-                            # 1. Analizar la estructura real de la tabla metas
-                            res_sample_m = supabase.table("metas").select("*").limit(1).execute()
-                            datos_sample_m = extraer_datos_respuesta(res_sample_m)
-                            columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
+                            # 1. Validar si ya existe en este usuario para no chocar
+                            res_dup = supabase.table("metas").select("*").eq("meta", nueva_meta_nombre).execute()
+                            datos_dup = extraer_datos_respuesta(res_dup)
                             
-                            # Detectar dinámicamente si se llama objetivo u objective
-                            obj_col = "objetivo"
-                            for c in ["objetivo", "objective", "monto_objetivo"]:
-                                if c in columnas_metas:
-                                    obj_col = c
+                            duplicado = False
+                            for d in datos_dup:
+                                owner_db = d.get("owner_id")
+                                if (owner_db is None and id_propietario_datos is None) or (str(owner_db) == str(id_propietario_datos)):
+                                    duplicado = True
                                     break
-                            
-                            # 2. Construir el registro básico
-                            nueva_fila_meta = {
-                                "meta": nueva_meta_nombre,
-                                "acumulado": 0.0,
-                                obj_col: float(objetivo_monto)
-                            }
-                            
-                            # 3. Forzar el owner_id solo si la columna físicamente existe en tu base
-                            if "owner_id" in columnas_metas and id_propietario_datos is not None:
-                                nueva_fila_meta["owner_id"] = int(id_propietario_datos)
-                            
-                            # 4. Grabar en Supabase
-                            supabase.table("metas").insert(nueva_fila_meta).execute()
-                            st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            # 5. Plan B de emergencia por si la tabla estaba 100% vacía y no pudo leer columnas
-                            try:
-                                fallback_meta = {"meta": nueva_meta_nombre, "acumulado": 0.0, "objetivo": float(objetivo_monto)}
-                                if id_propietario_datos is not None: fallback_meta["owner_id"] = int(id_propietario_datos)
-                                supabase.table("metas").insert(fallback_meta).execute()
+                                    
+                            if duplicado:
+                                st.warning(f"⚠️ Ya tenés una alcancía llamada '{nueva_meta_nombre}'. Elegí otro nombre o edita la existente.")
+                            else:
+                                # 2. Analizar columnas existentes
+                                res_sample_m = supabase.table("metas").select("*").limit(1).execute()
+                                datos_sample_m = extraer_datos_respuesta(res_sample_m)
+                                columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
+                                
+                                obj_col = "objetivo"
+                                for c in ["objetivo", "objective", "monto_objetivo"]:
+                                    if c in columnas_metas:
+                                        obj_col = c
+                                        break
+                                
+                                nueva_fila_meta = {
+                                    "meta": nueva_meta_nombre,
+                                    "acumulado": 0.0,
+                                    obj_col: float(objetivo_monto)
+                                }
+                                
+                                if "owner_id" in columnas_metas and id_propietario_datos is not None:
+                                    nueva_fila_meta["owner_id"] = int(id_propietario_datos)
+                                
+                                supabase.table("metas").insert(nueva_fila_meta).execute()
                                 st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
                                 st.cache_data.clear()
                                 st.rerun()
-                            except Exception as e2:
-                                st.error(f"Error al guardar la alcancía: {e2}")
+                        except Exception as e:
+                            st.error(f"Error al guardar la alcancía: {e}")
                     else:
                         st.warning("Por favor, escribí un nombre para tu meta.")
 
@@ -703,7 +704,6 @@ else:
             st.subheader("📌 Tus Alcancías Activas")
             for idx, row in df_metas.iterrows():
                 with st.container(border=True):
-                    # Detectar qué columna de objetivo usar para mostrarla bien
                     col_obj_ver = 'objective' if 'objective' in row else ('objetivo' if 'objetivo' in row else None)
                     obj = float(row[col_obj_ver]) if col_obj_ver and row[col_obj_ver] is not None else 1.0
                     acum = float(row.get('acumulado', 0.0))
