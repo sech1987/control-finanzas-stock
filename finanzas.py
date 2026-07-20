@@ -758,40 +758,103 @@ else:
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                                 st.cache_data.clear()
                                 st.rerun()
-    # ==========================================
-    # 👥 PERSONAL DEL TALLER
+ # ==========================================
+    # 👥 PERSONAL DEL TALLER (CORREGIDO Y VISIBLE)
     # ==========================================
     elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
-        st.title("👥 Personal del Taller")
+        st.title("👥 Panel de Control de Usuarios y Empleados")
+        st.markdown("Crea, gestiona y da de baja a los miembros del equipo de tu taller.")
+        
+        # ID del administrador actual
+        admin_id_actual = st.session_state.get("owner_id") or st.session_state.get("usuario_id")
+        nombre_taller_actual = st.session_state.get("nombre_taller", "Olivia Imagen")
+        
+        # 1. CARGAR EMPLEADOS DE FORMA ROBUSTA
         try:
-            res_u = supabase.table("usuarios").select("*").eq("owner_id", st.session_state.get("usuario_id")).execute()
-            df_usuarios_db = pd.DataFrame(extraer_datos_respuesta(res_u)) if extraer_datos_respuesta(res_u) else pd.DataFrame()
-        except Exception: df_usuarios_db = pd.DataFrame()
+            res_usuarios_all = supabase.table("usuarios").select("*").eq("rol", "Empleado").execute()
+            datos_u_all = extraer_datos_respuesta(res_usuarios_all)
+            df_u_all = pd.DataFrame(datos_u_all) if datos_u_all else pd.DataFrame()
             
+            if not df_u_all.empty:
+                # Filtrar empleados por owner_id o por el nombre del taller
+                condicion_owner = (df_u_all["owner_id"].astype(str) == str(admin_id_actual)) if "owner_id" in df_u_all.columns else False
+                
+                col_taller = "nombre_taller" if "nombre_taller" in df_u_all.columns else ("taller" if "taller" in df_u_all.columns else None)
+                condicion_taller = (df_u_all[col_taller] == nombre_taller_actual) if col_taller else False
+                
+                df_usuarios_db = df_u_all[condicion_owner | condicion_taller]
+            else:
+                df_usuarios_db = pd.DataFrame()
+        except Exception as e:
+            st.error(f"Error al leer la base de usuarios: {e}")
+            df_usuarios_db = pd.DataFrame()
+            
+        # 2. FORMULARIO PARA CREAR EMPLEADO
         with st.container(border=True):
+            st.subheader("🆕 Crear Nuevo Empleado")
             with st.form("form_crear_usuario", clear_on_submit=True):
                 col_u1, col_u2 = st.columns(2)
-                n_email = col_u1.text_input("Email Empleado:")
-                n_pass = col_u2.text_input("Contraseña:", type="password")
-                if st.form_submit_button("👥 Guardar Nuevo Miembro"):
-                    if n_email and n_pass:
+                nuevo_email_user = col_u1.text_input("Correo Electrónico (Login)", placeholder="empleado@olivia.com")
+                nuevo_pass_user = col_u2.text_input("Contraseña de Acceso", type="password", placeholder="••••••••")
+                
+                if st.form_submit_button("👥 Guardar Nuevo Miembro", type="primary", use_container_width=True):
+                    if nuevo_email_user and nuevo_pass_user:
                         try:
-                            # Forzar lectura limpia de columnas existentes
-                            res_s = supabase.table("usuarios").select("*").limit(1).execute()
-                            datos_s = extraer_datos_respuesta(res_s)
-                            cols_u = list(datos_s[0].keys()) if datos_s else []
+                            # Mapeo de columnas reales de la tabla usuarios
+                            res_sample = supabase.table("usuarios").select("*").limit(1).execute()
+                            datos_sample = extraer_datos_respuesta(res_sample)
+                            columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
                             
-                            col_p_det = "contraseña"
-                            for k in ["contraseña", "contrasena", "password", "clave", "pass"]:
-                                if k in cols_u: 
-                                    col_p_det = k
+                            col_pass_detectada = "password"
+                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                if k in columnas_existentes:
+                                    col_pass_detectada = k
                                     break
-                                    
-                            emp = {"email": n_email, col_p_det: n_pass, "rol": "Empleado", "owner_id": int(st.session_state.usuario_id)}
-                            if "nombre_taller" in cols_u: emp["nombre_taller"] = st.session_state.nombre_taller
-                            elif "taller" in cols_u: emp["taller"] = st.session_state.nombre_taller
                             
-                            supabase.table("usuarios").insert(emp).execute()
-                            st.success("¡Miembro del equipo registrado!")
+                            nuevo_empleado = {
+                                "email": nuevo_email_user,
+                                col_pass_detectada: nuevo_pass_user,
+                                "rol": "Empleado"
+                            }
+                            
+                            if "owner_id" in columnas_existentes and admin_id_actual is not None:
+                                nuevo_empleado["owner_id"] = int(admin_id_actual)
+                                
+                            if "nombre_taller" in columnas_existentes:
+                                nuevo_empleado["nombre_taller"] = nombre_taller_actual
+                            elif "taller" in columnas_existentes:
+                                nuevo_empleado["taller"] = nombre_taller_actual
+                                        
+                            supabase.table("usuarios").insert(nuevo_empleado).execute()
+                            st.success(f"¡Empleado '{nuevo_email_user}' registrado exitosamente!")
+                            st.cache_data.clear()
                             st.rerun()
-                        except Exception as e: st.error(f"Error al registrar usuario: {e}")
+                        except Exception as e:
+                            st.error(f"Error al registrar: {e}")
+                    else:
+                        st.warning("Completá todos los campos.")
+                        
+        st.markdown("---")
+        st.subheader("👥 Equipo Activo Registrado")
+        
+        # 3. MOSTRAR LISTADO EN PANTALLA
+        if df_usuarios_db.empty:
+            st.info("No tenés empleados registrados todavía en tu taller.")
+        else:
+            for idx, row in df_usuarios_db.iterrows():
+                with st.container(border=True):
+                    col_emp1, col_emp2, col_emp3 = st.columns([5, 3, 1])
+                    with col_emp1:
+                        st.markdown(f"📧 **{row['email']}**")
+                        st.caption(f"Rol: {row.get('rol', 'Empleado')}")
+                    with col_emp2:
+                        st.markdown(f"🏢 Taller: **{nombre_taller_actual}**")
+                    with col_emp3:
+                        if st.button("🗑️", key=f"del_user_{row['id']}", help="Eliminar permanentemente a este empleado"):
+                            try:
+                                supabase.table("usuarios").delete().eq("id", int(row["id"])).execute()
+                                st.success("¡Empleado eliminado!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"No se pudo eliminar al empleado: {e}")
