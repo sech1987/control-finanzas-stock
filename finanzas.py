@@ -276,7 +276,7 @@ else:
 
     rol_actual = st.session_state.get("rol", "Empleado")
 
-   # --- MENÚ LATERAL ---
+# --- MENÚ LATERAL MEJORADO ---
     with st.sidebar:
         # --- LOGO DINÁMICO ---
         if st.session_state.logo_taller is not None:
@@ -300,23 +300,42 @@ else:
                     pass
 
         st.markdown("---")
+        st.markdown("### 📌 Navegación")
         
+        # Variable de sesión para controlar la pestaña activa
+        if "seccion_activa" not in st.session_state:
+            st.session_state.seccion_activa = "📊 Dashboard General" if rol_actual == "Admin" else "📝 Nueva Operación"
+
+        # Definición de opciones según el rol
         if rol_actual == "Admin":
-            secciones = [
-                "📊 Dashboard General",
-                "🤖 Consultor IA",
-                "📝 Nueva Operación",
-                "🧮 Calculadora de Costos",
-                "📉 Punto de Equilibrio",
-                "📦 Stock de Insumos",
-                "🎯 Metas de Ahorro",
-                "👥 Personal del Taller"
+            secciones_botones = [
+                ("📊 Dashboard General", "📊 Dashboard General"),
+                ("🤖 Consultor IA", "🤖 Consultor IA"),
+                ("📝 Nueva Operación", "📝 Nueva Operación"),
+                ("🧮 Calculadora de Costos", "🧮 Calculadora de Costos"),
+                ("📉 Punto de Equilibrio", "📉 Punto de Equilibrio"),
+                ("📦 Stock de Insumos", "📦 Stock de Insumos"),
+                ("🎯 Metas de Ahorro", "🎯 Metas de Ahorro"),
+                ("👥 Personal del Taller", "👥 Personal del Taller")
             ]
         else:
-            secciones = ["📝 Nueva Operación", "📦 Stock de Insumos"]
+            secciones_botones = [
+                ("📝 Nueva Operación", "📝 Nueva Operación"),
+                ("📦 Stock de Insumos", "📦 Stock de Insumos")
+            ]
+
+        # Renderizar cada sección como un botón nativo tipo tarjeta
+        for label, nombre_seccion in secciones_botones:
+            # Resaltar botón si es la sección activa actual
+            es_activa = (st.session_state.seccion_activa == nombre_seccion)
+            tipo_btn = "primary" if es_activa else "secondary"
             
-        seccion = st.radio("Ir a:", secciones)
-        
+            if st.button(label, key=f"nav_btn_{nombre_seccion}", use_container_width=True, type=tipo_btn):
+                st.session_state.seccion_activa = nombre_seccion
+                st.rerun()
+
+        seccion = st.session_state.seccion_activa
+
         st.markdown("---")
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state.autenticado = False
@@ -325,7 +344,6 @@ else:
             st.session_state.owner_id = None
             st.session_state.logo_taller = None
             st.rerun()
-
     # ==========================================
     # 📊 DASHBOARD GENERAL
     # ==========================================
