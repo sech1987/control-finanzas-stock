@@ -24,7 +24,6 @@ if "owner_id" not in st.session_state:
 if "logo_taller" not in st.session_state:
     st.session_state.logo_taller = None
 
-# Inicializar lista dinámica de insumos para el presupuesto actual
 if "insumos_presupuesto" not in st.session_state:
     st.session_state.insumos_presupuesto = []
 
@@ -99,7 +98,6 @@ if not st.session_state.get("autenticado", False):
                         
                         if datos_user:
                             user_data = datos_user[0]
-                            
                             clave_usuario = None
                             for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
                                 if k in user_data:
@@ -154,7 +152,6 @@ if not st.session_state.get("autenticado", False):
                         else:
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
-                            
                             columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
                             
                             col_pass_detectada = "password"
@@ -181,7 +178,7 @@ if not st.session_state.get("autenticado", False):
                                 nuevo_admin["taller"] = reg_taller
                             
                             supabase.table("usuarios").insert(nuevo_admin).execute()
-                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión en la pestaña izquierda.{mensaje_vto}")
+                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión.{mensaje_vto}")
                     except Exception as e:
                         st.error(f"Error al registrar la cuenta: {e}")
                 else:
@@ -192,33 +189,14 @@ if not st.session_state.get("autenticado", False):
 # ==========================================
 else:
     id_propietario_datos = st.session_state.get("owner_id")
+    usuario_id_actual = st.session_state.get("usuario_id")
+    usuario_email_actual = st.session_state.get("usuario_email")
+    rol_actual = st.session_state.get("rol", "Empleado")
 
     @st.cache_data(ttl=3)
     def cargar_datos_seguro(owner_id_filtro):
         try:
-            col_owner_historial_existe = False
-            try:
-                res_check_hist = supabase.table("historial").select("*").limit(1).execute()
-                datos_check_hist = extraer_datos_respuesta(res_check_hist)
-                if datos_check_hist and len(datos_check_hist) > 0:
-                    col_owner_historial_existe = "owner_id" in datos_check_hist[0].keys()
-            except Exception:
-                col_owner_historial_existe = False
-
-            col_owner_stock_existe = False
-            try:
-                res_check_stock = supabase.table("stock").select("*").limit(1).execute()
-                datos_check_stock = extraer_datos_respuesta(res_check_stock)
-                if datos_check_stock and len(datos_check_stock) > 0:
-                    col_owner_stock_existe = "owner_id" in datos_check_stock[0].keys()
-            except Exception:
-                col_owner_stock_existe = False
-
-            if col_owner_historial_existe and owner_id_filtro is not None:
-                res_historial = supabase.table("historial").select("*").eq("owner_id", owner_id_filtro).order("fecha", desc=True).execute()
-            else:
-                res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
-                
+            res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
             datos_historial = extraer_datos_respuesta(res_historial)
             df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
             
@@ -226,34 +204,37 @@ else:
                 df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
                 df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
                 
-            if col_owner_stock_existe and owner_id_filtro is not None:
-                res_stock = supabase.table("stock").select("*").eq("owner_id", owner_id_filtro).execute()
-            else:
-                res_stock = supabase.table("stock").select("*").execute()
-                
+            res_stock = supabase.table("stock").select("*").execute()
             datos_stock = extraer_datos_respuesta(res_stock)
             df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
             
             if not df_stock_tmp.empty:
                 df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
                 df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
-                
                 col_precio = None
                 for c in ["precio_costo", "precio", "costo", "valor_costo"]:
                     if c in df_stock_tmp.columns:
                         col_precio = c
                         break
-                if col_precio:
-                    df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float)
-                else:
-                    df_stock_tmp["precio_costo"] = 0.0
+                df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float) if col_precio else 0.0
                 
             return df_hist_tmp, df_stock_tmp
         except Exception as e:
             st.error(f"Error cargando base de datos: {e}")
             return pd.DataFrame(), pd.DataFrame()
 
-    df_historial, df_stock = cargar_datos_seguro(id_propietario_datos)
+    df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
+
+    # Filtrar datos según el rol para aislar los datos correctamente
+    if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
+        df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
+    else:
+        df_historial = df_historial_total
+
+    if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
+        df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
+    else:
+        df_stock = df_stock_total
 
     col_desc_detectada = "descripcion"
     if not df_historial.empty:
@@ -262,7 +243,7 @@ else:
                 col_desc_detectada = c
                 break
 
-    # Balance de cajas
+    # Balance general del taller
     caja_negocio = 0.0
     billetera_personal = 0.0
     if not df_historial.empty:
@@ -274,27 +255,22 @@ else:
         caja_negocio = ingresos - gastos_negocio - retiros_personales
         billetera_personal = retiros_personales - gastos_personales
 
-    rol_actual = st.session_state.get("rol", "Empleado")
-
-# --- MENÚ LATERAL MEJORADO ---
+    # --- MENÚ LATERAL ESTILIZADO POR BOTONES ---
     with st.sidebar:
-        # --- LOGO DINÁMICO ---
         if st.session_state.logo_taller is not None:
             st.image(st.session_state.logo_taller, width=100)
         else:
             st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
             
         st.title(st.session_state.nombre_taller)
-        st.caption(f"Sesión: **{st.session_state.usuario_email}** ({rol_actual})")
+        st.caption(f"Sesión: **{usuario_email_actual}** ({rol_actual})")
         
-        # --- CONFIGURACIÓN DE LOGO OCULTA EN EXPANDER ---
         with st.expander("⚙️ Configurar Logo"):
             archivo_logo = st.file_uploader("Subir imagen (PNG/JPG)", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
             if archivo_logo is not None:
                 try:
                     img_logo = Image.open(archivo_logo)
-                    img_logo = img_logo.resize((300, 300))
-                    st.session_state.logo_taller = img_logo
+                    st.session_state.logo_taller = img_logo.resize((300, 300))
                     st.rerun()
                 except Exception:
                     pass
@@ -302,14 +278,13 @@ else:
         st.markdown("---")
         st.markdown("### 📌 Navegación")
         
-        # Variable de sesión para controlar la pestaña activa
         if "seccion_activa" not in st.session_state:
-            st.session_state.seccion_activa = "📊 Dashboard General" if rol_actual == "Admin" else "📝 Nueva Operación"
+            st.session_state.seccion_activa = "📊 Dashboard General" if rol_actual == "Admin" else "💵 Mi Caja Diaria"
 
-        # Definición de opciones según el rol
         if rol_actual == "Admin":
             secciones_botones = [
                 ("📊 Dashboard General", "📊 Dashboard General"),
+                ("🧾 Cajas & Cierres Empleados", "🧾 Cajas & Cierres Empleados"),
                 ("🤖 Consultor IA", "🤖 Consultor IA"),
                 ("📝 Nueva Operación", "📝 Nueva Operación"),
                 ("🧮 Calculadora de Costos", "🧮 Calculadora de Costos"),
@@ -320,16 +295,14 @@ else:
             ]
         else:
             secciones_botones = [
+                ("💵 Mi Caja Diaria", "💵 Mi Caja Diaria"),
                 ("📝 Nueva Operación", "📝 Nueva Operación"),
                 ("📦 Stock de Insumos", "📦 Stock de Insumos")
             ]
 
-        # Renderizar cada sección como un botón nativo tipo tarjeta
         for label, nombre_seccion in secciones_botones:
-            # Resaltar botón si es la sección activa actual
             es_activa = (st.session_state.seccion_activa == nombre_seccion)
             tipo_btn = "primary" if es_activa else "secondary"
-            
             if st.button(label, key=f"nav_btn_{nombre_seccion}", use_container_width=True, type=tipo_btn):
                 st.session_state.seccion_activa = nombre_seccion
                 st.rerun()
@@ -344,8 +317,9 @@ else:
             st.session_state.owner_id = None
             st.session_state.logo_taller = None
             st.rerun()
+
     # ==========================================
-    # 📊 DASHBOARD GENERAL
+    # 📊 DASHBOARD GENERAL (ADMIN)
     # ==========================================
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}")
@@ -353,21 +327,17 @@ else:
         col_c1, col_c2 = st.columns(2)
         with col_c1:
             st.metric(label="💼 FONDOS DISPONIBLES EMPRENDIMIENTO", value=f"$ {caja_negocio:,.2f}")
-            st.caption("Capital total activo en la caja operativa de tu taller.")
+            st.caption("Capital total activo en la caja operativa del taller.")
         with col_c2:
             st.metric(label="👤 FINANZAS PERSONALES (RETIRO LIBRE)", value=f"$ {billetera_personal:,.2f}")
             st.caption("Dinero extraído neto disponible para tus gastos personales cotidianos.")
             
         st.markdown("---")
         st.markdown("### 💡 Distribución Interna Recomendada")
-        caja_insumos_calc = caja_negocio * 0.35
-        caja_sueldos_calc = caja_negocio * 0.55
-        caja_mantenimiento_calc = caja_negocio * 0.10
-        
         col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1: st.metric(label="📦 CAJA INSUMOS (35%)", value=f"$ {caja_insumos_calc:,.2f}")
-        with col_p2: st.metric(label="💸 CAJA SUELDOS (55%)", value=f"$ {caja_sueldos_calc:,.2f}")
-        with col_p3: st.metric(label="🔧 MANTENIMIENTO (10%)", value=f"$ {caja_mantenimiento_calc:,.2f}")
+        with col_p1: st.metric(label="📦 CAJA INSUMOS (35%)", value=f"$ {caja_negocio * 0.35:,.2f}")
+        with col_p2: st.metric(label="💸 CAJA SUELDOS (55%)", value=f"$ {caja_negocio * 0.55:,.2f}")
+        with col_p3: st.metric(label="🔧 MANTENIMIENTO (10%)", value=f"$ {caja_negocio * 0.10:,.2f}")
             
         st.markdown("---")
         if not df_historial.empty:
@@ -377,49 +347,129 @@ else:
                 df_exportar = df_historial.copy()
                 df_exportar["fecha"] = df_exportar["fecha"].dt.strftime('%Y-%m-%d %H:%M:%S')
                 csv_data = df_exportar.to_csv(index=False, encoding="utf-8-sig")
-                st.download_button(
-                    label="📥 Descargar Planilla de Movimientos (Excel/CSV)",
-                    data=csv_data,
-                    file_name=f"movimientos_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                st.download_button("📥 Descargar Movimientos (Excel/CSV)", data=csv_data, file_name=f"movimientos_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", use_container_width=True)
             with col_exp2:
                 st.markdown("### 📅 Seleccionar Período")
                 df_historial["periodo"] = df_historial["fecha"].dt.strftime('%Y-%m')
-                periodos_disponibles = sorted(df_historial["periodo"].unique(), reverse=True)
-                periodo_seleccionado = st.selectbox("Mes de Análisis:", periodos_disponibles)
-                df_filtrado_mes = df_historial[df_historial["periodo"] == periodo_seleccionado]
+                periodos = sorted(df_historial["periodo"].unique(), reverse=True)
+                periodo_sel = st.selectbox("Mes de Análisis:", periodos)
+                df_filtrado_mes = df_historial[df_historial["periodo"] == periodo_sel]
             
             st.markdown("---")
-            st.subheader(f"📊 Balance Financiero Mensual ({periodo_seleccionado})")
-            ingresos_mes = df_filtrado_mes[df_filtrado_mes["tipo"] == "Ingreso"]["monto"].sum()
-            egresos_mes = df_filtrado_mes[df_filtrado_mes["tipo"].isin(["Gasto Negocio", "Retiro Sueldo", "Gasto Personal"])]["monto"].sum()
-            
-            df_chart = pd.DataFrame({"Categoría": ["Gastos / Egresos", "Ventas / Ingresos"], "Monto ($)": [egresos_mes, ingresos_mes]})
-            st.bar_chart(data=df_chart, x="Categoría", y="Monto ($)", color="#ff4b4b", use_container_width=True)
-            
-            st.markdown("---")
-            st.subheader("📋 Lista Detallada de Movimientos")
-            for idx, row in df_filtrado_mes.iterrows():
-                color_card = "#2ecc71" if row["tipo"] == "Ingreso" else "#e74c3c"
-                simbolo = "➕" if row["tipo"] == "Ingreso" else "➖"
-                with st.container(border=True):
-                    col_t1, col_t2, col_t3 = st.columns([5, 3, 1])
-                    with col_t1:
-                        st.markdown(f"**{simbolo} {row['tipo']}** - {row[col_desc_detectada]}")
-                        st.caption(f"📅 Fecha: {row['fecha'].strftime('%Y-%m-%d %H:%M:%S')}")
-                    with col_t2:
-                        st.markdown(f"<h3 style='margin:0; color:{color_card};'>$ {row['monto']:,.2f}</h3>", unsafe_allow_html=True)
-                    with col_t3:
-                        if st.button("🗑️", key=f"del_h_{row['id']}"):
-                            try:
-                                supabase.table("historial").delete().eq("id", int(row["id"])).execute()
-                                st.success("¡Movimiento eliminado!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e: st.error(f"Error al borrar: {e}")
+            st.subheader(f"📊 Balance Financiero Mensual ({periodo_sel})")
+            ingresos_m = df_filtrado_mes[df_filtrado_mes["tipo"] == "Ingreso"]["monto"].sum()
+            egresos_m = df_filtrado_mes[df_filtrado_mes["tipo"].isin(["Gasto Negocio", "Retiro Sueldo", "Gasto Personal"])]["monto"].sum()
+            st.bar_chart(pd.DataFrame({"Categoría": ["Gastos", "Ingresos"], "Monto ($)": [egresos_m, ingresos_m]}), x="Categoría", y="Monto ($)", color="#ff4b4b", use_container_width=True)
         else: st.info("No hay transacciones registradas.")
+
+    # ==========================================
+    # 💵 MI CAJA DIARIA (VISTA EMPLEADO / MI CAJA)
+    # ==========================================
+    elif seccion == "💵 Mi Caja Diaria":
+        st.title(f"💵 Mi Caja del Día - {usuario_email_actual}")
+        st.markdown("Registrá tus cobranzas del día y realizá el cierre de caja antes de terminar la jornada.")
+        
+        # Filtrar movimientos del día realizados por este usuario
+        hoy_str = datetime.now().strftime('%Y-%m-%d')
+        if not df_historial.empty and "usuario_email" in df_historial.columns:
+            df_mi_caja_hoy = df_historial[(df_historial["fecha"].dt.strftime('%Y-%m-%d') == hoy_str) & (df_historial["usuario_email"] == usuario_email_actual)]
+        elif not df_historial.empty:
+            df_mi_caja_hoy = df_historial[df_historial["fecha"].dt.strftime('%Y-%m-%d') == hoy_str]
+        else:
+            df_mi_caja_hoy = pd.DataFrame()
+
+        ingresos_hoy = df_mi_caja_hoy[df_mi_caja_hoy["tipo"] == "Ingreso"]["monto"].sum() if not df_mi_caja_hoy.empty else 0.0
+        gastos_hoy = df_mi_caja_hoy[df_mi_caja_hoy["tipo"] == "Gasto Negocio"]["monto"].sum() if not df_mi_caja_hoy.empty else 0.0
+        saldo_teorico_hoy = ingresos_hoy - gastos_hoy
+
+        col_mc1, col_mc2, col_mc3 = st.columns(3)
+        col_mc1.metric("🟢 Ventas/Cobros del Día", f"$ {ingresos_hoy:,.2f}")
+        col_mc2.metric("🔴 Gastos en Efectivo del Día", f"$ {gastos_hoy:,.2f}")
+        col_mc3.metric("💼 SALDO A ENTREGAR EN CAJA", f"$ {saldo_teorico_hoy:,.2f}")
+
+        st.markdown("---")
+        st.subheader("📋 Mis Movimientos de Hoy")
+        if df_mi_caja_hoy.empty:
+            st.info("Aún no registraste cobros ni gastos el día de hoy.")
+        else:
+            st.dataframe(df_mi_caja_hoy[["fecha", "tipo", col_desc_detectada, "monto"]], use_container_width=True)
+
+        st.markdown("---")
+        # FORMULARIO DE CIERRE DE CAJA DIARIA
+        with st.container(border=True):
+            st.subheader("🔒 Arqueo y Cierre de Caja Diaria")
+            st.markdown("Contá el dinero en efectivo del cajón e ingresalo abajo para cerrar el día:")
+            
+            monto_fisico_real = st.number_input("Monto Físico Real en Cajón ($):", min_value=0.0, step=100.0)
+            diferencia_caja = monto_fisico_real - saldo_teorico_hoy
+            
+            if monto_fisico_real > 0:
+                if diferencia_caja == 0:
+                    st.success("🟢 ¡Caja Perfecta! El efectivo físico coincide exacto con el sistema.")
+                elif diferencia_caja > 0:
+                    st.info(f"🔵 Sobrante en Caja: $ {diferencia_caja:,.2f}")
+                else:
+                    st.error(f"🔴 Faltante en Caja: $ {abs(diferencia_caja):,.2f}")
+
+            observacion_cierre = st.text_input("Observaciones / Notas del Cierre (Ej: Se dejó $5.000 para cambio)")
+
+            if st.button("🔒 Confirmar y Enviar Cierre de Caja", type="primary", use_container_width=True):
+                try:
+                    res_sample_c = supabase.table("cierres_caja").select("*").limit(1).execute()
+                    datos_sample_c = extraer_datos_respuesta(res_sample_c)
+                    cols_c = list(datos_sample_c[0].keys()) if datos_sample_c else []
+                    
+                    registro_cierre = {
+                        "fecha": datetime.now().isoformat(),
+                        "usuario_email": usuario_email_actual,
+                        "ingresos_sistema": ingresos_hoy,
+                        "gastos_sistema": gastos_hoy,
+                        "saldo_teorico": saldo_teorico_hoy,
+                        "efectivo_real": monto_fisico_real,
+                        "diferencia": diferencia_caja,
+                        "observacion": observacion_cierre
+                    }
+                    if "owner_id" in cols_c and id_propietario_datos is not None:
+                        registro_cierre["owner_id"] = int(id_propietario_datos)
+
+                    supabase.table("cierres_caja").insert(registro_cierre).execute()
+                    st.success("🎉 ¡Cierre de caja registrado y enviado al administrador exitosamente!")
+                except Exception as e:
+                    st.error(f"Error al registrar el cierre: {e}")
+
+    # ==========================================
+    # 🧾 CAJAS Y CIERRES DE EMPLEADOS (ADMIN)
+    # ==========================================
+    elif seccion == "🧾 Cajas & Cierres Empleados" and rol_actual == "Admin":
+        st.title("🧾 Panel de Control de Cajas y Cierres de Empleados")
+        st.markdown("Revisá en tiempo real las cajas individuales de tu personal y los arqueos de caja diarios.")
+
+        # Cargar historial de cierres de caja
+        try:
+            res_cierres = supabase.table("cierres_caja").select("*").order("fecha", desc=True).execute()
+            datos_cierres = extraer_datos_respuesta(res_cierres)
+            df_cierres = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
+        except Exception:
+            df_cierres = pd.DataFrame()
+
+        tab_cierres_hist, tab_cajas_vivo = st.tabs(["📋 Historial de Cierres Recibidos", "🔍 Auditar Cajas en Vivo"])
+
+        with tab_cierres_hist:
+            if df_cierres.empty:
+                st.info("Aún no se registraron cierres de caja enviados por empleados.")
+            else:
+                st.dataframe(df_cierres, use_container_width=True)
+
+        with tab_cajas_vivo:
+            st.subheader("🔍 Movimientos del Día por Usuario")
+            if not df_historial.empty and "usuario_email" in df_historial.columns:
+                lista_usuarios = df_historial["usuario_email"].dropna().unique().tolist()
+                user_filtro = st.selectbox("Seleccionar Usuario para Auditar:", lista_usuarios)
+                
+                df_audit_user = df_historial[df_historial["usuario_email"] == user_filtro]
+                st.dataframe(df_audit_user[["fecha", "tipo", col_desc_detectada, "monto"]], use_container_width=True)
+            else:
+                st.info("No hay suficientes datos registrados con correo de usuario para filtrar.")
 
     # ==========================================
     # 🤖 CONSULTOR IA
@@ -463,11 +513,17 @@ else:
                         for c in ["descripcion", "detalle", "concepto"]:
                             if c in columnas_existentes_hist: col_destino_desc = c; break
                         
-                        fila_insertar = {"fecha": datetime.now().isoformat(), "tipo": tipo_db, "monto": monto_op, col_destino_desc: desc_op}
+                        fila_insertar = {
+                            "fecha": datetime.now().isoformat(),
+                            "tipo": tipo_db,
+                            "monto": monto_op,
+                            col_destino_desc: desc_op,
+                            "usuario_email": usuario_email_actual
+                        }
                         if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None: fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
-                        st.success("¡Operación registrada!")
+                        st.success("¡Operación registrada con éxito!")
                         st.session_state.datos_ultimo_envio = {"detalle": desc_op, "monto": monto_op} if tipo_db == "Ingreso" else None
                         st.cache_data.clear()
                     except Exception as e: st.error(f"Error: {e}")
@@ -554,7 +610,7 @@ else:
             st.columns(2)[0].metric("🏁 FACTURACIÓN MÍNIMA REQUERIDA", f"$ {pe_pesos:,.2f}")
 
     # ==========================================
-    # 📦 STOCK DE INSUMOS (CON FUNCIÓN DE BORRADO)
+    # 📦 STOCK DE INSUMOS
     # ==========================================
     elif seccion == "📦 Stock de Insumos":
         st.title("📦 Inventario de Insumos Críticos")
@@ -588,7 +644,6 @@ else:
                         guardar_cambios = btn_col1.form_submit_button("💾 Guardar Cambios en Insumo", use_container_width=True, type="primary")
                         eliminar_item = btn_col2.form_submit_button("🗑️ Eliminar", use_container_width=True)
                         
-                        # Lógica unificada de acciones
                         if guardar_cambios:
                             try:
                                 res_st = supabase.table("stock").select("*").limit(1).execute()
@@ -603,9 +658,9 @@ else:
                         if eliminar_item:
                             try:
                                 supabase.table("stock").delete().eq("item", item_seleccionado).execute()
-                                st.success(f"¡Insumo '{item_seleccionado}' eliminado definitivamente!")
+                                st.success(f"¡Insumo '{item_seleccionado}' eliminado!")
                                 st.cache_data.clear(); st.rerun()
-                            except Exception as e: st.error(f"Error al eliminar: {e}")
+                            except Exception as e: st.error(f"Error: {e}")
                                 
             with tab_crear_categoria:
                 with st.form("form_crear_insumo", clear_on_submit=True):
@@ -640,20 +695,17 @@ else:
                                     st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
 
- # ==========================================
-    # 🎯 METAS DE AHORRO (BLINDADO Y CORREGIDO)
+    # ==========================================
+    # 🎯 METAS DE AHORRO
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro")
-        
-        # Cargar metas de forma segura
         try:
             res_metas = supabase.table("metas").select("*").execute()
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
             if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
-                # Traer metas del usuario actual o las que quedaron en NULL/vacias
                 df_metas = df_metas_tmp[(df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)) | (df_metas_tmp["owner_id"].isna())]
             else:
                 df_metas = df_metas_tmp
@@ -670,54 +722,33 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True, type="primary"):
                     if nueva_meta_nombre:
                         try:
-                            # 1. Validar si ya existe en este usuario para no chocar
                             res_dup = supabase.table("metas").select("*").eq("meta", nueva_meta_nombre).execute()
                             datos_dup = extraer_datos_respuesta(res_dup)
-                            
-                            duplicado = False
-                            for d in datos_dup:
-                                owner_db = d.get("owner_id")
-                                if (owner_db is None and id_propietario_datos is None) or (str(owner_db) == str(id_propietario_datos)):
-                                    duplicado = True
-                                    break
+                            duplicado = any(str(d.get("owner_id")) == str(id_propietario_datos) for d in datos_dup)
                                     
                             if duplicado:
-                                st.warning(f"⚠️ Ya tenés una alcancía llamada '{nueva_meta_nombre}'. Elegí otro nombre o edita la existente.")
+                                st.warning(f"⚠️ Ya tenés una alcancía llamada '{nueva_meta_nombre}'.")
                             else:
-                                # 2. Analizar columnas existentes
                                 res_sample_m = supabase.table("metas").select("*").limit(1).execute()
                                 datos_sample_m = extraer_datos_respuesta(res_sample_m)
                                 columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
                                 
                                 obj_col = "objetivo"
                                 for c in ["objetivo", "objective", "monto_objetivo"]:
-                                    if c in columnas_metas:
-                                        obj_col = c
-                                        break
+                                    if c in columnas_metas: obj_col = c; break
                                 
-                                nueva_fila_meta = {
-                                    "meta": nueva_meta_nombre,
-                                    "acumulado": 0.0,
-                                    obj_col: float(objetivo_monto)
-                                }
-                                
+                                nueva_fila_meta = {"meta": nueva_meta_nombre, "acumulado": 0.0, obj_col: float(objetivo_monto)}
                                 if "owner_id" in columnas_metas and id_propietario_datos is not None:
                                     nueva_fila_meta["owner_id"] = int(id_propietario_datos)
                                 
                                 supabase.table("metas").insert(nueva_fila_meta).execute()
                                 st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
-                                st.cache_data.clear()
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al guardar la alcancía: {e}")
-                    else:
-                        st.warning("Por favor, escribí un nombre para tu meta.")
+                                st.cache_data.clear(); st.rerun()
+                        except Exception as e: st.error(f"Error: {e}")
 
         st.markdown("---")
-        
-        # --- DIBUJAR LAS ALCANCÍAS EN PANTALLA ---
         if df_metas.empty:
-            st.info("📌 Todavía no tenés ninguna alcancía creada. ¡Armá la primera arriba!")
+            st.info("📌 Todavía no tenés ninguna alcancía creada.")
         else:
             st.subheader("📌 Tus Alcancías Activas")
             for idx, row in df_metas.iterrows():
@@ -731,65 +762,46 @@ else:
                     
                     col_m1.markdown(f"🎯 **{row['meta']}**")
                     col_m1.progress(min(1.0, max(0.0, acum / obj)))
-                    col_m1.caption(f"📈 Progreso de ahorro: **{porcentaje:.1f}%**")
-                    
+                    col_m1.caption(f"📈 Progreso: **{porcentaje:.1f}%**")
                     col_m2.markdown(f"**Ahorrado:** $ {acum:,.2f} / $ {obj:,.2f}")
                     
                     with col_m3:
-                        monto_ahorrar = st.number_input(
-                            "Sumar/Restar fondos ($):", 
-                            value=0.0, 
-                            step=500.0, 
-                            key=f"add_m_input_{row['id']}"
-                        )
-                        
+                        monto_ahorrar = st.number_input("Sumar/Restar ($):", value=0.0, step=500.0, key=f"add_m_input_{row['id']}")
                         col_btns = st.columns(2)
                         with col_btns[0]:
-                            if st.button("💾", key=f"btn_save_m_meta_{row['id']}", help="Guardar monto"):
-                                nuevo_acumulado = acum + monto_ahorrar
-                                if nuevo_acumulado < 0:
-                                    st.error("No podés retirar más de lo que tenés acumulado.")
-                                else:
-                                    supabase.table("metas").update({"acumulado": nuevo_acumulado}).eq("id", int(row["id"])).execute()
-                                    st.cache_data.clear()
-                                    st.rerun()
+                            if st.button("💾", key=f"btn_save_m_meta_{row['id']}"):
+                                if acum + monto_ahorrar >= 0:
+                                    supabase.table("metas").update({"acumulado": acum + monto_ahorrar}).eq("id", int(row["id"])).execute()
+                                    st.cache_data.clear(); st.rerun()
                         with col_btns[1]:
-                            if st.button("🗑️", key=f"btn_del_m_meta_{row['id']}", help="Eliminar alcancía"):
+                            if st.button("🗑️", key=f"btn_del_m_meta_{row['id']}"):
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
-                                st.cache_data.clear()
-                                st.rerun()
- # ==========================================
-    # 👥 PERSONAL DEL TALLER (CORREGIDO Y VISIBLE)
+                                st.cache_data.clear(); st.rerun()
+
+    # ==========================================
+    # 👥 PERSONAL DEL TALLER
     # ==========================================
     elif seccion == "👥 Personal del Taller" and rol_actual == "Admin":
         st.title("👥 Panel de Control de Usuarios y Empleados")
         st.markdown("Crea, gestiona y da de baja a los miembros del equipo de tu taller.")
         
-        # ID del administrador actual
         admin_id_actual = st.session_state.get("owner_id") or st.session_state.get("usuario_id")
         nombre_taller_actual = st.session_state.get("nombre_taller", "Olivia Imagen")
         
-        # 1. CARGAR EMPLEADOS DE FORMA ROBUSTA
         try:
             res_usuarios_all = supabase.table("usuarios").select("*").eq("rol", "Empleado").execute()
             datos_u_all = extraer_datos_respuesta(res_usuarios_all)
             df_u_all = pd.DataFrame(datos_u_all) if datos_u_all else pd.DataFrame()
             
             if not df_u_all.empty:
-                # Filtrar empleados por owner_id o por el nombre del taller
                 condicion_owner = (df_u_all["owner_id"].astype(str) == str(admin_id_actual)) if "owner_id" in df_u_all.columns else False
-                
                 col_taller = "nombre_taller" if "nombre_taller" in df_u_all.columns else ("taller" if "taller" in df_u_all.columns else None)
                 condicion_taller = (df_u_all[col_taller] == nombre_taller_actual) if col_taller else False
-                
                 df_usuarios_db = df_u_all[condicion_owner | condicion_taller]
-            else:
-                df_usuarios_db = pd.DataFrame()
+            else: df_usuarios_db = pd.DataFrame()
         except Exception as e:
-            st.error(f"Error al leer la base de usuarios: {e}")
             df_usuarios_db = pd.DataFrame()
             
-        # 2. FORMULARIO PARA CREAR EMPLEADO
         with st.container(border=True):
             st.subheader("🆕 Crear Nuevo Empleado")
             with st.form("form_crear_usuario", clear_on_submit=True):
@@ -800,44 +812,27 @@ else:
                 if st.form_submit_button("👥 Guardar Nuevo Miembro", type="primary", use_container_width=True):
                     if nuevo_email_user and nuevo_pass_user:
                         try:
-                            # Mapeo de columnas reales de la tabla usuarios
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
                             
                             col_pass_detectada = "password"
                             for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                if k in columnas_existentes:
-                                    col_pass_detectada = k
-                                    break
+                                if k in columnas_existentes: col_pass_detectada = k; break
                             
-                            nuevo_empleado = {
-                                "email": nuevo_email_user,
-                                col_pass_detectada: nuevo_pass_user,
-                                "rol": "Empleado"
-                            }
-                            
-                            if "owner_id" in columnas_existentes and admin_id_actual is not None:
-                                nuevo_empleado["owner_id"] = int(admin_id_actual)
-                                
-                            if "nombre_taller" in columnas_existentes:
-                                nuevo_empleado["nombre_taller"] = nombre_taller_actual
-                            elif "taller" in columnas_existentes:
-                                nuevo_empleado["taller"] = nombre_taller_actual
+                            nuevo_empleado = {"email": nuevo_email_user, col_pass_detectada: nuevo_pass_user, "rol": "Empleado"}
+                            if "owner_id" in columnas_existentes and admin_id_actual is not None: nuevo_empleado["owner_id"] = int(admin_id_actual)
+                            if "nombre_taller" in columnas_existentes: nuevo_empleado["nombre_taller"] = nombre_taller_actual
+                            elif "taller" in columnas_existentes: nuevo_empleado["taller"] = nombre_taller_actual
                                         
                             supabase.table("usuarios").insert(nuevo_empleado).execute()
                             st.success(f"¡Empleado '{nuevo_email_user}' registrado exitosamente!")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al registrar: {e}")
-                    else:
-                        st.warning("Completá todos los campos.")
+                            st.cache_data.clear(); st.rerun()
+                        except Exception as e: st.error(f"Error: {e}")
+                    else: st.warning("Completá todos los campos.")
                         
         st.markdown("---")
         st.subheader("👥 Equipo Activo Registrado")
-        
-        # 3. MOSTRAR LISTADO EN PANTALLA
         if df_usuarios_db.empty:
             st.info("No tenés empleados registrados todavía en tu taller.")
         else:
@@ -847,14 +842,11 @@ else:
                     with col_emp1:
                         st.markdown(f"📧 **{row['email']}**")
                         st.caption(f"Rol: {row.get('rol', 'Empleado')}")
-                    with col_emp2:
-                        st.markdown(f"🏢 Taller: **{nombre_taller_actual}**")
+                    with col_emp2: st.markdown(f"🏢 Taller: **{nombre_taller_actual}**")
                     with col_emp3:
-                        if st.button("🗑️", key=f"del_user_{row['id']}", help="Eliminar permanentemente a este empleado"):
+                        if st.button("🗑️", key=f"del_user_{row['id']}"):
                             try:
                                 supabase.table("usuarios").delete().eq("id", int(row["id"])).execute()
                                 st.success("¡Empleado eliminado!")
-                                st.cache_data.clear()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"No se pudo eliminar al empleado: {e}")
+                                st.cache_data.clear(); st.rerun()
+                            except Exception as e: st.error(f"Error: {e}")
