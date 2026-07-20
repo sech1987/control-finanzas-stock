@@ -622,7 +622,7 @@ else:
                                     st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
 
-  # ==========================================
+ # ==========================================
     # 🎯 METAS DE AHORRO (BLINDADO Y CORREGIDO)
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
