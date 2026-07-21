@@ -225,7 +225,6 @@ else:
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
-    # Filtrar datos según el rol para aislar los datos correctamente
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
         df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
     else:
@@ -243,7 +242,6 @@ else:
                 col_desc_detectada = c
                 break
 
-    # Balance general del taller
     caja_negocio = 0.0
     billetera_personal = 0.0
     if not df_historial.empty:
@@ -324,6 +322,12 @@ else:
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}")
         
+        # ALERTA DE STOCK CRÍTICO EN EL DASHBOARD
+        if not df_stock.empty:
+            criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
+            if not criticos.empty:
+                st.warning(f"⚠️ **Alerta de Stock:** Tenés {len(criticos)} insumo(s) en punto de reorden mínimo ({', '.join(criticos['item'].tolist())}). Revisá la sección de Stock.")
+
         col_c1, col_c2 = st.columns(2)
         with col_c1:
             st.metric(label="💼 FONDOS DISPONIBLES EMPRENDIMIENTO", value=f"$ {caja_negocio:,.2f}")
@@ -369,7 +373,6 @@ else:
         st.title(f"💵 Mi Caja del Día - {usuario_email_actual}")
         st.markdown("Registrá tus cobranzas del día y realizá el cierre de caja antes de terminar la jornada.")
         
-        # Filtrar movimientos del día realizados por este usuario
         hoy_str = datetime.now().strftime('%Y-%m-%d')
         if not df_historial.empty and "usuario_email" in df_historial.columns:
             df_mi_caja_hoy = df_historial[(df_historial["fecha"].dt.strftime('%Y-%m-%d') == hoy_str) & (df_historial["usuario_email"] == usuario_email_actual)]
@@ -395,7 +398,6 @@ else:
             st.dataframe(df_mi_caja_hoy[["fecha", "tipo", col_desc_detectada, "monto"]], use_container_width=True)
 
         st.markdown("---")
-        # FORMULARIO DE CIERRE DE CAJA DIARIA
         with st.container(border=True):
             st.subheader("🔒 Arqueo y Cierre de Caja Diaria")
             st.markdown("Contá el dinero en efectivo del cajón e ingresalo abajo para cerrar el día:")
@@ -444,7 +446,6 @@ else:
         st.title("🧾 Panel de Control de Cajas y Cierres de Empleados")
         st.markdown("Revisá en tiempo real las cajas individuales de tu personal y los arqueos de caja diarios.")
 
-        # Cargar historial de cierres de caja
         try:
             res_cierres = supabase.table("cierres_caja").select("*").order("fecha", desc=True).execute()
             datos_cierres = extraer_datos_respuesta(res_cierres)
@@ -597,17 +598,94 @@ else:
                 st.text_area("Copia rápida:", value=texto_presupuesto, height=100)
 
     # ==========================================
-    # 📉 PUNTO DE EQUILIBRIO
+    # 📉 PUNTO DE EQUILIBRIO (TOTALMENTE REDISEÑADO)
     # ==========================================
     elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
-        st.title("📉 Punto de Equilibrio")
-        with st.container(border=True):
-            col_eq1, col_eq2 = st.columns(2)
-            costos_fijos_fijos = col_eq1.number_input("Costos Fijos Mensuales ($)", value=150000.0)
-            margen_contribucion = col_eq2.slider("Margen Ganancia Promedio (%)", 10, 200, 50)
-            porcentaje_margen = (margen_contribucion / (100 + margen_contribucion))
-            pe_pesos = costos_fijos_fijos / porcentaje_margen if porcentaje_margen > 0 else 0.0
-            st.columns(2)[0].metric("🏁 FACTURACIÓN MÍNIMA REQUERIDA", f"$ {pe_pesos:,.2f}")
+        st.title("📉 Calculadora Real de Punto de Equilibrio Financiero")
+        st.markdown("Descubrí exactamente cuántos pesos y cuántos trabajos tenés que vender para cubrir el 100% de los costos fijos de tu taller.")
+        
+        tab_pe_moneda, tab_pe_unidades = st.tabs(["💵 Calculadora por Facturación Total ($)", "📦 Calculadora por Cantidad de Trabajos/Unidades"])
+
+        # TAB 1: PUNTO DE EQUILIBRIO FINANCIERO
+        with tab_pe_moneda:
+            with st.container(border=True):
+                st.subheader("1️⃣ Desglose de Costos Fijos Mensuales")
+                col_cf1, col_cf2 = st.columns(2)
+                
+                alquiler = col_cf1.number_input("Alquiler Taller / Local ($):", value=80000.0, step=5000.0)
+                servicios = col_cf2.number_input("Luz, Agua, Internet, Celular ($):", value=25000.0, step=2000.0)
+                
+                col_cf3, col_cf4 = st.columns(2)
+                impuestos = col_cf3.number_input("Monotributo / IIBB / Contabilidad ($):", value=15000.0, step=1000.0)
+                sueldos_fijos = col_cf4.number_input("Sueldos Fijos / Retiro Mínimo ($):", value=180000.0, step=10000.0)
+
+                mantenimiento_equipos = st.number_input("Mantenimiento de Máquinas / Repuestos ($):", value=20000.0, step=2000.0)
+
+                total_costos_fijos = alquiler + servicios + impuestos + sueldos_fijos + mantenimiento_equipos
+                st.markdown(f"#### 💸 **Total Costos Fijos Mensuales:** `$ {total_costos_fijos:,.2f}`")
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.subheader("2️⃣ Margen Promedio y Resultado Financiero")
+                
+                margen_promedio_pct = st.slider("Margen Promedio de Ganancia sobre Costo Variable (%)", min_value=10, max_value=300, value=60, step=5)
+                
+                # Fórmula de Margen de Contribución: Margen % / (100% + Margen %)
+                margen_contribucion_ratio = (margen_promedio_pct / (100 + margen_promedio_pct))
+                
+                # Punto de Equilibrio = Costos Fijos / Margen Contribución Ratio
+                punto_equilibrio_pesos = total_costos_fijos / margen_contribucion_ratio if margen_contribucion_ratio > 0 else 0.0
+
+                st.markdown("---")
+                col_per1, col_per2 = st.columns(2)
+                col_per1.metric("🏁 FACTURACIÓN MÍNIMA MENSUAL", f"$ {punto_equilibrio_pesos:,.2f}")
+                col_per2.metric("📊 Margen de Contribución Real", f"{margen_contribucion_ratio * 100:.1f} %")
+
+                # Comparativa con las ventas reales del mes actual
+                mes_actual_str = datetime.now().strftime('%Y-%m')
+                ingresos_mes_actual = 0.0
+                if not df_historial.empty:
+                    df_mes_act = df_historial[(df_historial["fecha"].dt.strftime('%Y-%m') == mes_actual_str) & (df_historial["tipo"] == "Ingreso")]
+                    ingresos_mes_actual = df_mes_act["monto"].sum()
+
+                diferencia_pe = ingresos_mes_actual - punto_equilibrio_pesos
+                st.markdown("---")
+                st.subheader("📈 Estado del Mes Actual")
+                col_st1, col_st2 = st.columns(2)
+                col_st1.metric("💵 Facturado en el Mes Actual", f"$ {ingresos_mes_actual:,.2f}")
+                
+                if diferencia_pe >= 0:
+                    col_st2.metric("🎉 Superávit / Ganancia Neta", f"$ {diferencia_pe:,.2f}", delta="Caja Cubierta")
+                    st.success("🟢 **¡Felicidades!** Ya cubriste todos los costos fijos del taller este mes. Todo lo que factures a partir de ahora es ganancia neta.")
+                else:
+                    col_st2.metric("⚠️ Falta Facturar", f"$ {abs(diferencia_pe):,.2f}", delta="-Aún sin cubrir")
+                    st.info(f"💡 Te faltan facturar **$ {abs(diferencia_pe):,.2f}** para alcanzar el punto de equilibrio de este mes.")
+
+        # TAB 2: PUNTO DE EQUILIBRIO EN UNIDADES/TRABAJOS
+        with tab_pe_unidades:
+            st.subheader("📦 ¿Cuántas Unidades/Trabajos tenés que vender?")
+            st.markdown("Ingresá el valor y costo promedio de tu trabajo más vendido para calcular el volumen necesario de producción:")
+
+            with st.container(border=True):
+                col_u1, col_u2 = st.columns(2)
+                nombre_prod_estrella = col_u1.text_input("Producto / Trabajo Referencia:", value="Taza Personalizada / Bajada DTF")
+                precio_venta_unitario = col_u2.number_input("Precio de Venta Promedio por Unidad ($):", value=4500.0, step=500.0)
+
+                costo_variable_unitario = st.number_input("Costo Directo de Insumos por Unidad ($):", value=2000.0, step=200.0)
+
+                margin_ganancia_unidad = precio_venta_unitario - costo_variable_unitario
+
+                if margin_ganancia_unidad > 0:
+                    unidades_necesarias = total_costos_fijos / margin_ganancia_unidad
+                    st.markdown("---")
+                    col_un1, col_un2 = st.columns(2)
+                    col_un1.metric("🎯 UNIDADES MENSUALES A VENDER", f"{int(unidades_necesarias) + 1} unidades")
+                    col_un2.metric("💰 Ganancia Neta por Unidad", f"$ {margin_ganancia_unidad:,.2f}")
+
+                    unidades_diarias = (unidades_necesarias / 22) # Promedio 22 días hábiles
+                    st.info(f"📌 Para alcanzar el punto de equilibrio vendiendo solo *{nombre_prod_estrella}*, necesitás producir aproximadamente **{int(unidades_diarias) + 1} unidades por día hábil**.")
+                else:
+                    st.error("⚠️ El precio de venta debe ser mayor al costo de insumos para poder calcular el punto de equilibrio.")
 
     # ==========================================
     # 📦 STOCK DE INSUMOS
