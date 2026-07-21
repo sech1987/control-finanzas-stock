@@ -837,6 +837,29 @@ else:
                                     st.success("¡Insumo cargado!")
                                     st.cache_data.clear(); st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
+     # --- CARGA BLINDADA DE STOCK ---
+try:
+    res_stock = supabase.table("stock").select("*").execute()
+    datos_stock = extraer_datos_respuesta(res_stock)
+    df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
+    
+    if not df_stock_tmp.empty:
+        df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
+        df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
+        
+        col_precio = None
+        for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+            if c in df_stock_tmp.columns:
+                col_precio = c
+                break
+        df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float) if col_precio else 0.0
+        
+        # Muestra absolutamente todos los insumos disponibles sin filtrar severamente
+        df_stock = df_stock_tmp
+    else:
+        df_stock = pd.DataFrame()
+except Exception as e:
+    df_stock = pd.DataFrame()                           
 
     # ==========================================
     # 🎯 METAS DE AHORRO
