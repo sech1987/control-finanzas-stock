@@ -225,13 +225,13 @@ else:
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
-    # Filtrar historial
+    # FILTRO FLEXIBLE DE HISTORIAL (Garantiza ver todos los movimientos)
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
         df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
     else:
         df_historial = df_historial_total
 
-    # FILTRO FLEXIBLE DE STOCK (Muestra las cargas actuales y las anteriores)
+    # FILTRO FLEXIBLE DE STOCK
     if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
         df_stock = df_stock_total[(df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_stock_total["owner_id"].isna())]
     else:
@@ -365,7 +365,31 @@ else:
             ingresos_m = df_filtrado_mes[df_filtrado_mes["tipo"] == "Ingreso"]["monto"].sum()
             egresos_m = df_filtrado_mes[df_filtrado_mes["tipo"].isin(["Gasto Negocio", "Retiro Sueldo", "Gasto Personal"])]["monto"].sum()
             st.bar_chart(pd.DataFrame({"Categoría": ["Gastos", "Ingresos"], "Monto ($)": [egresos_m, ingresos_m]}), x="Categoría", y="Monto ($)", color="#ff4b4b", use_container_width=True)
-        else: st.info("No hay transacciones registradas.")
+            
+            st.markdown("---")
+            st.subheader("📋 Lista Detallada de Movimientos")
+            for idx, row in df_filtrado_mes.iterrows():
+                color_card = "#2ecc71" if row["tipo"] == "Ingreso" else "#e74c3c"
+                simbolo = "➕" if row["tipo"] == "Ingreso" else "➖"
+                with st.container(border=True):
+                    col_t1, col_t2, col_t3 = st.columns([5, 3, 1])
+                    with col_t1:
+                        st.markdown(f"**{simbolo} {row['tipo']}** - {row[col_desc_detectada]}")
+                        f_str = row['fecha'].strftime('%Y-%m-%d %H:%M:%S') if hasattr(row['fecha'], 'strftime') else str(row['fecha'])
+                        st.caption(f"📅 Fecha: {f_str} | Usuario: {row.get('usuario_email', 'Admin')}")
+                    with col_t2:
+                        st.markdown(f"<h3 style='margin:0; color:{color_card};'>$ {row['monto']:,.2f}</h3>", unsafe_allow_html=True)
+                    with col_t3:
+                        if st.button("🗑️", key=f"del_h_{row['id']}"):
+                            try:
+                                supabase.table("historial").delete().eq("id", int(row["id"])).execute()
+                                st.success("¡Movimiento eliminado!")
+                                st.cache_data.clear()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al borrar: {e}")
+        else:
+            st.info("No hay transacciones registradas.")
 
     # ==========================================
     # 💵 MI CAJA DIARIA (VISTA EMPLEADO / MI CAJA)
@@ -441,7 +465,7 @@ else:
                     st.error(f"Error al registrar el cierre: {e}")
 
     # ==========================================
-    # 🧾 CAJAS Y CIERRES DE EMPLEADOS (CON EXPORTACIÓN Y BORRADO)
+    # 🧾 CAJAS Y CIERRES DE EMPLEADOS
     # ==========================================
     elif seccion == "🧾 Cajas & Cierres Empleados" and rol_actual == "Admin":
         st.title("🧾 Panel de Control de Cajas y Cierres de Empleados")
@@ -452,7 +476,6 @@ else:
             datos_cierres = extraer_datos_respuesta(res_cierres)
             df_cierres = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
             
-            # Filtro flexible para ver todos los cierres del taller
             if not df_cierres.empty and "owner_id" in df_cierres.columns and id_propietario_datos is not None:
                 df_cierres = df_cierres[(df_cierres["owner_id"].astype(str) == str(id_propietario_datos)) | (df_cierres["owner_id"].isna())]
         except Exception:
@@ -464,7 +487,6 @@ else:
             if df_cierres.empty:
                 st.info("Aún no se registraron cierres de caja enviados por empleados.")
             else:
-                # BOTÓN DE DESCARGA DE CIERRES EN EXCEL/CSV
                 df_exp_cierres = df_cierres.copy()
                 if "fecha" in df_exp_cierres.columns:
                     df_exp_cierres["fecha"] = pd.to_datetime(df_exp_cierres["fecha"]).dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -481,7 +503,6 @@ else:
                 st.markdown("---")
                 st.subheader("📋 Lista Detallada de Arqueos de Caja")
                 
-                # LISTADO DE CIERRES CON OPCIÓN DE BORRADO INDIVIDUAL
                 for idx_cierre, row_cierre in df_cierres.iterrows():
                     with st.container(border=True):
                         col_c1, col_c2, col_c3 = st.columns([4, 4, 1])
