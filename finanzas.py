@@ -225,13 +225,15 @@ else:
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
+    # Filtrar historial
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
-        df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
+        df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
     else:
         df_historial = df_historial_total
 
+    # FILTRO FLEXIBLE DE STOCK (Muestra las cargas actuales y las anteriores)
     if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
-        df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
+        df_stock = df_stock_total[(df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_stock_total["owner_id"].isna())]
     else:
         df_stock = df_stock_total
 
@@ -322,7 +324,6 @@ else:
     if seccion == "📊 Dashboard General" and rol_actual == "Admin":
         st.title(f"📊 Control de Mando - {st.session_state.nombre_taller}")
         
-        # ALERTA DE STOCK CRÍTICO EN EL DASHBOARD
         if not df_stock.empty:
             criticos = df_stock[df_stock["cantidad"] <= df_stock["minimo"]]
             if not criticos.empty:
@@ -440,16 +441,20 @@ else:
                     st.error(f"Error al registrar el cierre: {e}")
 
     # ==========================================
-    # 🧾 CAJAS Y CIERRES DE EMPLEADOS (ADMIN)
+    # 🧾 CAJAS Y CIERRES DE EMPLEADOS (CON EXPORTACIÓN Y BORRADO)
     # ==========================================
     elif seccion == "🧾 Cajas & Cierres Empleados" and rol_actual == "Admin":
         st.title("🧾 Panel de Control de Cajas y Cierres de Empleados")
-        st.markdown("Revisá en tiempo real las cajas individuales de tu personal y los arqueos de caja diarios.")
+        st.markdown("Revisá en tiempo real las cajas individuales de tu personal, descargá los reportes y gestioná los arqueos de caja.")
 
         try:
             res_cierres = supabase.table("cierres_caja").select("*").order("fecha", desc=True).execute()
             datos_cierres = extraer_datos_respuesta(res_cierres)
             df_cierres = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
+            
+            # Filtro flexible para ver todos los cierres del taller
+            if not df_cierres.empty and "owner_id" in df_cierres.columns and id_propietario_datos is not None:
+                df_cierres = df_cierres[(df_cierres["owner_id"].astype(str) == str(id_propietario_datos)) | (df_cierres["owner_id"].isna())]
         except Exception:
             df_cierres = pd.DataFrame()
 
@@ -459,7 +464,52 @@ else:
             if df_cierres.empty:
                 st.info("Aún no se registraron cierres de caja enviados por empleados.")
             else:
-                st.dataframe(df_cierres, use_container_width=True)
+                # BOTÓN DE DESCARGA DE CIERRES EN EXCEL/CSV
+                df_exp_cierres = df_cierres.copy()
+                if "fecha" in df_exp_cierres.columns:
+                    df_exp_cierres["fecha"] = pd.to_datetime(df_exp_cierres["fecha"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                csv_cierres_data = df_exp_cierres.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    label="📥 Descargar Reporte de Cierres de Caja (Excel / CSV)",
+                    data=csv_cierres_data,
+                    file_name=f"cierres_caja_{st.session_state.nombre_taller}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                st.markdown("---")
+                st.subheader("📋 Lista Detallada de Arqueos de Caja")
+                
+                # LISTADO DE CIERRES CON OPCIÓN DE BORRADO INDIVIDUAL
+                for idx_cierre, row_cierre in df_cierres.iterrows():
+                    with st.container(border=True):
+                        col_c1, col_c2, col_c3 = st.columns([4, 4, 1])
+                        
+                        fecha_f = pd.to_datetime(row_cierre["fecha"]).strftime('%d/%m/%Y %H:%M') if "fecha" in row_cierre else "S/F"
+                        col_c1.markdown(f"👤 **{row_cierre.get('usuario_email', 'Empleado')}**")
+                        col_c1.caption(f"📅 Fecha de Cierre: {fecha_f}")
+                        if row_cierre.get("observacion"):
+                            col_c1.caption(f"📝 Nota: {row_cierre.get('observacion')}")
+                            
+                        col_c2.markdown(f"**Sistema:** $ {float(row_cierre.get('saldo_teorico', 0)):,.2f} | **Físico:** $ {float(row_cierre.get('efectivo_real', 0)):,.2f}")
+                        dif_val = float(row_cierre.get('diferencia', 0))
+                        if dif_val == 0:
+                            col_c2.markdown("<span style='color:green; font-weight:bold;'>🟢 Caja Sin Diferencia</span>", unsafe_allow_html=True)
+                        elif dif_val > 0:
+                            col_c2.markdown(f"<span style='color:blue; font-weight:bold;'>🔵 Sobrante: $ {dif_val:,.2f}</span>", unsafe_allow_html=True)
+                        else:
+                            col_c2.markdown(f"<span style='color:red; font-weight:bold;'>🔴 Faltante: $ {abs(dif_val):,.2f}</span>", unsafe_allow_html=True)
+
+                        with col_c3:
+                            if st.button("🗑️", key=f"del_cierre_{row_cierre['id']}", help="Eliminar este cierre de caja"):
+                                try:
+                                    supabase.table("cierres_caja").delete().eq("id", int(row_cierre["id"])).execute()
+                                    st.success("¡Cierre eliminado!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error al borrar: {e}")
 
         with tab_cajas_vivo:
             st.subheader("🔍 Movimientos del Día por Usuario")
@@ -598,7 +648,7 @@ else:
                 st.text_area("Copia rápida:", value=texto_presupuesto, height=100)
 
     # ==========================================
-    # 📉 PUNTO DE EQUILIBRIO (TOTALMENTE REDISEÑADO)
+    # 📉 PUNTO DE EQUILIBRIO
     # ==========================================
     elif seccion == "📉 Punto de Equilibrio" and rol_actual == "Admin":
         st.title("📉 Calculadora Real de Punto de Equilibrio Financiero")
@@ -606,7 +656,6 @@ else:
         
         tab_pe_moneda, tab_pe_unidades = st.tabs(["💵 Calculadora por Facturación Total ($)", "📦 Calculadora por Cantidad de Trabajos/Unidades"])
 
-        # TAB 1: PUNTO DE EQUILIBRIO FINANCIERO
         with tab_pe_moneda:
             with st.container(border=True):
                 st.subheader("1️⃣ Desglose de Costos Fijos Mensuales")
@@ -630,10 +679,7 @@ else:
                 
                 margen_promedio_pct = st.slider("Margen Promedio de Ganancia sobre Costo Variable (%)", min_value=10, max_value=300, value=60, step=5)
                 
-                # Fórmula de Margen de Contribución: Margen % / (100% + Margen %)
                 margen_contribucion_ratio = (margen_promedio_pct / (100 + margen_promedio_pct))
-                
-                # Punto de Equilibrio = Costos Fijos / Margen Contribución Ratio
                 punto_equilibrio_pesos = total_costos_fijos / margen_contribucion_ratio if margen_contribucion_ratio > 0 else 0.0
 
                 st.markdown("---")
@@ -641,7 +687,6 @@ else:
                 col_per1.metric("🏁 FACTURACIÓN MÍNIMA MENSUAL", f"$ {punto_equilibrio_pesos:,.2f}")
                 col_per2.metric("📊 Margen de Contribución Real", f"{margen_contribucion_ratio * 100:.1f} %")
 
-                # Comparativa con las ventas reales del mes actual
                 mes_actual_str = datetime.now().strftime('%Y-%m')
                 ingresos_mes_actual = 0.0
                 if not df_historial.empty:
@@ -661,7 +706,6 @@ else:
                     col_st2.metric("⚠️ Falta Facturar", f"$ {abs(diferencia_pe):,.2f}", delta="-Aún sin cubrir")
                     st.info(f"💡 Te faltan facturar **$ {abs(diferencia_pe):,.2f}** para alcanzar el punto de equilibrio de este mes.")
 
-        # TAB 2: PUNTO DE EQUILIBRIO EN UNIDADES/TRABAJOS
         with tab_pe_unidades:
             st.subheader("📦 ¿Cuántas Unidades/Trabajos tenés que vender?")
             st.markdown("Ingresá el valor y costo promedio de tu trabajo más vendido para calcular el volumen necesario de producción:")
@@ -682,7 +726,7 @@ else:
                     col_un1.metric("🎯 UNIDADES MENSUALES A VENDER", f"{int(unidades_necesarias) + 1} unidades")
                     col_un2.metric("💰 Ganancia Neta por Unidad", f"$ {margin_ganancia_unidad:,.2f}")
 
-                    unidades_diarias = (unidades_necesarias / 22) # Promedio 22 días hábiles
+                    unidades_diarias = (unidades_necesarias / 22)
                     st.info(f"📌 Para alcanzar el punto de equilibrio vendiendo solo *{nombre_prod_estrella}*, necesitás producir aproximadamente **{int(unidades_diarias) + 1} unidades por día hábil**.")
                 else:
                     st.error("⚠️ El precio de venta debe ser mayor al costo de insumos para poder calcular el punto de equilibrio.")
