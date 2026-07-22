@@ -6,7 +6,7 @@ import io
 from PIL import Image
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Olivia Imagen - Gestión Financiera", page_icon="🛍️", layout="wide")
+st.set_page_config(page_title="Finanzas y Stock Manager Pro", page_icon="💼", layout="wide")
 
 # --- CONTROL DE SESIÓN ---
 if "autenticado" not in st.session_state:
