@@ -103,31 +103,35 @@ if not st.session_state.get("autenticado", False):
                                 if k in user_data:
                                     clave_usuario = user_data[k]
                                     break
-                            
                             if str(clave_usuario) == str(password_input):
                                 vto_prueba = user_data.get("trial_expires_at")
-                              if vto_prueba:
-    fecha_vto = pd.to_datetime(vto_prueba).tz_localize(None)
-    if datetime.now() > fecha_vto:
-        st.error("❌ Tu período de prueba de 14 días ha vencido.")
-        st.info("💡 Para continuar usando la plataforma, elegí tu plan y activá tu suscripción:")
-        
-        # LINK DE COBRO - Botón directo a Mercado Pago / Stripe
-        st.link_button(
-            label="💳 Suscribirme por $1 USD/Mes o $10 USD/Año", 
-            url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM",  # Reemplazar por tu Link real
-            type="primary",
-            use_container_width=True
-        )
-        st.stop()
-        # LINK DE COBRO - Botón directo a Mercado Pago / Stripe
-        st.link_button(
-            label="💳 Suscribirme por $1 USD/Mes o $10 USD/Año", 
-            url="https://mpago.la/tu-link-de-cobro-aqui",  # Reemplazar por tu Link real
-            type="primary",
-            use_container_width=True
-        )
-        st.stop()
+                                if vto_prueba:
+                                    fecha_vto = pd.to_datetime(vto_prueba).tz_localize(None)
+                                    if datetime.now() > fecha_vto:
+                                        st.error("❌ Tu período de prueba de 14 días ha vencido.")
+                                        st.info("💡 Para continuar usando la plataforma, activá tu membresía:")
+                                        st.link_button(
+                                            label="💳 Activar Membresía ($1/mes o $10/año)", 
+                                            url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM", 
+                                            type="primary",
+                                            use_container_width=True
+                                        )
+                                        st.stop()
+                                
+                                st.session_state.autenticado = True
+                                st.session_state.usuario_id = user_data["id"]
+                                st.session_state.usuario_email = user_data["email"]
+                                st.session_state.rol = user_data.get("rol", "Empleado")
+                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
+                                
+                                if st.session_state.rol == "Admin":
+                                    st.session_state.owner_id = user_data["id"]
+                                else:
+                                    st.session_state.owner_id = user_data.get("owner_id")
+                                    
+                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
+                                st.rerun()
+                           
                                 
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_id = user_data["id"]
