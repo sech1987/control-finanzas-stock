@@ -861,20 +861,34 @@ else:
                             except Exception as e: st.error(f"Error: {e}")
 
     # ==========================================
-    # 🎯 METAS DE AHORRO
+    # 🎯 METAS DE AHORRO (SOLUCIÓN DEFINITIVA)
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro")
+        
         try:
             res_metas = supabase.table("metas").select("*").execute()
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
-            if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
-                df_metas = df_metas_tmp[df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
+            if not df_metas_tmp.empty:
+                # Comprobamos si es la cuenta principal de Olivia o si tiene un id asignado
+                es_olivia = (usuario_email_actual.lower() == "admin@olivia.com") or ("olivia" in st.session_state.get("nombre_taller", "").lower())
+                
+                if "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
+                    if es_olivia:
+                        # Para Olivia muestra sus alcancías + las que se crearon en NULL al principio
+                        cond_owner = (df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)) | (df_metas_tmp["owner_id"].isna())
+                        df_metas = df_metas_tmp[cond_owner]
+                    else:
+                        # Para usuarios nuevos de prueba, solo sus alcancías
+                        df_metas = df_metas_tmp[df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
+                else:
+                    df_metas = df_metas_tmp
             else:
-                df_metas = df_metas_tmp if id_propietario_datos is None else pd.DataFrame()
-        except Exception:
+                df_metas = pd.DataFrame()
+        except Exception as e:
+            st.error(f"Error cargando metas: {e}")
             df_metas = pd.DataFrame()
         
         with st.container(border=True):
@@ -887,31 +901,36 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True, type="primary"):
                     if nueva_meta_nombre:
                         try:
-                            res_dup = supabase.table("metas").select("*").eq("meta", nueva_meta_nombre).execute()
-                            datos_dup = extraer_datos_respuesta(res_dup)
-                            duplicado = any(str(d.get("owner_id")) == str(id_propietario_datos) for d in datos_dup)
-                                    
-                            if duplicado:
-                                st.warning(f"⚠️ Ya tenés una alcancía llamada '{nueva_meta_nombre}'.")
-                            else:
-                                res_sample_m = supabase.table("metas").select("*").limit(1).execute()
-                                datos_sample_m = extraer_datos_respuesta(res_sample_m)
-                                columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
-                                
-                                obj_col = "objetivo"
-                                for c in ["objetivo", "objective", "monto_objetivo"]:
-                                    if c in columnas_metas: obj_col = c; break
-                                
-                                nueva_fila_meta = {"meta": nueva_meta_nombre, "acumulado": 0.0, obj_col: float(objetivo_monto)}
-                                if "owner_id" in columnas_metas and id_propietario_datos is not None:
-                                    nueva_fila_meta["owner_id"] = int(id_propietario_datos)
-                                
-                                supabase.table("metas").insert(nueva_fila_meta).execute()
-                                st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
-                                # Forzado explícito de vaciado de caché para dibujo inmediato
-                                st.cache_data.clear()
-                                st.rerun()
-                        except Exception as e: st.error(f"Error: {e}")
+                            # Detectamos nombres de columnas existentes en Supabase
+                            res_sample_m = supabase.table("metas").select("*").limit(1).execute()
+                            datos_sample_m = extraer_datos_respuesta(res_sample_m)
+                            columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
+                            
+                            obj_col = "objetivo"
+                            for c in ["objetivo", "objective", "monto_objetivo"]:
+                                if c in columnas_metas: 
+                                    obj_col = c
+                                    break
+                            
+                            nueva_fila_meta = {
+                                "meta": nueva_meta_nombre, 
+                                "acumulado": 0.0, 
+                                obj_col: float(objetivo_monto)
+                            }
+                            
+                            if "owner_id" in columnas_metas and id_propietario_datos is not None:
+                                nueva_fila_meta["owner_id"] = int(id_propietario_datos)
+                            
+                            supabase.table("metas").insert(nueva_fila_meta).execute()
+                            st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
+                            
+                            # Limpieza completa de caché para recarga inmediata en pantalla
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e: 
+                            st.error(f"Error al guardar la alcancía: {e}")
+                    else:
+                        st.warning("Por favor ingresá un nombre para la alcancía.")
 
         st.markdown("---")
         if df_metas.empty:
@@ -920,14 +939,20 @@ else:
             st.subheader("📌 Tus Alcancías Activas")
             for idx, row in df_metas.iterrows():
                 with st.container(border=True):
-                    col_obj_ver = 'objective' if 'objective' in row else ('objetivo' if 'objetivo' in row else None)
-                    obj = float(row[col_obj_ver]) if col_obj_ver and row[col_obj_ver] is not None else 1.0
-                    acum = float(row.get('acumulado', 0.0))
+                    # Búsqueda segura del campo objetivo
+                    col_obj_ver = None
+                    for c in ['objetivo', 'objective', 'monto_objetivo']:
+                        if c in row and row[c] is not None:
+                            col_obj_ver = c
+                            break
+                    
+                    obj = float(row[col_obj_ver]) if col_obj_ver else 1.0
+                    acum = float(row.get('acumulado', 0.0)) if pd.notna(row.get('acumulado')) else 0.0
                     
                     porcentaje = (acum / obj) * 100 if obj > 0 else 0.0
                     col_m1, col_m2, col_m3 = st.columns([4, 3, 2])
                     
-                    col_m1.markdown(f"🎯 **{row['meta']}**")
+                    col_m1.markdown(f"🎯 **{row.get('meta', 'Alcancía')}**")
                     col_m1.progress(min(1.0, max(0.0, acum / obj)))
                     col_m1.caption(f"📈 Progreso: **{porcentaje:.1f}%**")
                     col_m2.markdown(f"**Ahorrado:** $ {acum:,.2f} / $ {obj:,.2f}")
@@ -939,12 +964,13 @@ else:
                             if st.button("💾", key=f"btn_save_m_meta_{row['id']}"):
                                 if acum + monto_ahorrar >= 0:
                                     supabase.table("metas").update({"acumulado": acum + monto_ahorrar}).eq("id", int(row["id"])).execute()
-                                    st.cache_data.clear(); st.rerun()
+                                    st.cache_data.clear()
+                                    st.rerun()
                         with col_btns[1]:
                             if st.button("🗑️", key=f"btn_del_m_meta_{row['id']}"):
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
-                                st.cache_data.clear(); st.rerun()
-
+                                st.cache_data.clear()
+                                st.rerun()
     # ==========================================
     # 👥 PERSONAL DEL TALLER
     # ==========================================
