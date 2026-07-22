@@ -115,7 +115,7 @@ if not st.session_state.get("autenticado", False):
         # LINK DE COBRO - Botón directo a Mercado Pago / Stripe
         st.link_button(
             label="💳 Suscribirme por $1 USD/Mes o $10 USD/Año", 
-            url="https://mpago.la/tu-link-de-cobro-aqui",  # Reemplazar por tu Link real
+            url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM",  # Reemplazar por tu Link real
             type="primary",
             use_container_width=True
         )
