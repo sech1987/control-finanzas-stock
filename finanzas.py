@@ -225,18 +225,17 @@ else:
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
-    # FILTRO FLEXIBLE DE HISTORIAL
+    # FILTRO ESTRICTO DE HISTORIAL POR DUEÑO DE TALLER
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
-        df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
+        df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
     else:
-        df_historial = df_historial_total
+        df_historial = df_historial_total if id_propietario_datos is None else pd.DataFrame()
 
-    # CARGA DIRECTA Y BLINDADA DE STOCK (Muestra todos los insumos cargados)
-    # FILTRO AISLADO DE STOCK POR TALLER/DUEÑO
+    # FILTRO ESTRICTO DE STOCK POR DUEÑO DE TALLER
     if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
         df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
     else:
-        df_stock = df_stock_total
+        df_stock = df_stock_total if id_propietario_datos is None else pd.DataFrame()
 
     col_desc_detectada = "descripcion"
     if not df_historial.empty:
@@ -475,10 +474,13 @@ else:
         try:
             res_cierres = supabase.table("cierres_caja").select("*").order("fecha", desc=True).execute()
             datos_cierres = extraer_datos_respuesta(res_cierres)
-            df_cierres = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
+            df_cierres_tmp = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
             
-            if not df_cierres.empty and "owner_id" in df_cierres.columns and id_propietario_datos is not None:
-                df_cierres = df_cierres[(df_cierres["owner_id"].astype(str) == str(id_propietario_datos)) | (df_cierres["owner_id"].isna())]
+            # Filtro estricto por dueño de taller
+            if not df_cierres_tmp.empty and "owner_id" in df_cierres_tmp.columns and id_propietario_datos is not None:
+                df_cierres = df_cierres_tmp[df_cierres_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
+            else:
+                df_cierres = df_cierres_tmp if id_propietario_datos is None else pd.DataFrame()
         except Exception:
             df_cierres = pd.DataFrame()
 
@@ -849,10 +851,11 @@ else:
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
+            # FILTRO ESTRICTO DE METAS POR DUEÑO DE TALLER
             if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
-                df_metas = df_metas_tmp[(df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)) | (df_metas_tmp["owner_id"].isna())]
+                df_metas = df_metas_tmp[df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
             else:
-                df_metas = df_metas_tmp
+                df_metas = df_metas_tmp if id_propietario_datos is None else pd.DataFrame()
         except Exception:
             df_metas = pd.DataFrame()
         
