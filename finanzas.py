@@ -232,7 +232,11 @@ else:
         df_historial = df_historial_total
 
     # CARGA DIRECTA Y BLINDADA DE STOCK (Muestra todos los insumos cargados)
-    df_stock = df_stock_total
+    # FILTRO AISLADO DE STOCK POR TALLER/DUEÑO
+    if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
+        df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
+    else:
+        df_stock = df_stock_total
 
     col_desc_detectada = "descripcion"
     if not df_historial.empty:
