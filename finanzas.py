@@ -244,7 +244,8 @@ else:
         except Exception as e:
             st.error(f"Error cargando base de datos: {e}")
             return pd.DataFrame(), pd.DataFrame()
-with st.sidebar:
+
+    df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
         # ... (código existente del logo y título) ...
         
         st.markdown("---")
