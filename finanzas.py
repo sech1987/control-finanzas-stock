@@ -107,11 +107,19 @@ if not st.session_state.get("autenticado", False):
                             if str(clave_usuario) == str(password_input):
                                 vto_prueba = user_data.get("trial_expires_at")
                               if vto_prueba:
-                                    fecha_vto = pd.to_datetime(vto_prueba).tz_localize(None)
-                              if datetime.now() > fecha_vto:
-                              st.error("❌ Tu período de prueba de 14 días ha vencido.")
-                              st.info("💡 Para continuar usando la plataforma, elegí tu plan y activá tu suscripción:")
+    fecha_vto = pd.to_datetime(vto_prueba).tz_localize(None)
+    if datetime.now() > fecha_vto:
+        st.error("❌ Tu período de prueba de 14 días ha vencido.")
+        st.info("💡 Para continuar usando la plataforma, elegí tu plan y activá tu suscripción:")
         
+        # LINK DE COBRO - Botón directo a Mercado Pago / Stripe
+        st.link_button(
+            label="💳 Suscribirme por $1 USD/Mes o $10 USD/Año", 
+            url="https://mpago.la/tu-link-de-cobro-aqui",  # Reemplazar por tu Link real
+            type="primary",
+            use_container_width=True
+        )
+        st.stop()
         # LINK DE COBRO - Botón directo a Mercado Pago / Stripe
         st.link_button(
             label="💳 Suscribirme por $1 USD/Mes o $10 USD/Año", 
