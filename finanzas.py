@@ -150,6 +150,10 @@ if not st.session_state.get("autenticado", False):
                         if datos_check:
                             st.error("⚠️ Este correo electrónico ya está registrado.")
                         else:
+                            # 14 días de prueba fijos calculados de antemano
+                            fecha_vto_calculada = datetime.now() + timedelta(days=14)
+                            fecha_vto_iso = fecha_vto_calculada.isoformat()
+                            
                             res_sample = supabase.table("usuarios").select("*").limit(1).execute()
                             datos_sample = extraer_datos_respuesta(res_sample)
                             columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
@@ -167,10 +171,7 @@ if not st.session_state.get("autenticado", False):
                             }
                             
                             if "trial_expires_at" in columnas_existentes:
-                                nuevo_admin["trial_expires_at"] = (datetime.now() + timedelta(days=14)).isoformat()
-                                mensaje_vto = f" Tu prueba vence el {(datetime.now() + timedelta(days=14)).strftime('%d/%m/%Y')}."
-                            else:
-                                mensaje_vto = " (Acceso ilimitado activado)."
+                                nuevo_admin["trial_expires_at"] = fecha_vto_iso
                             
                             if "nombre_taller" in columnas_existentes:
                                 nuevo_admin["nombre_taller"] = reg_taller
@@ -178,7 +179,7 @@ if not st.session_state.get("autenticado", False):
                                 nuevo_admin["taller"] = reg_taller
                             
                             supabase.table("usuarios").insert(nuevo_admin).execute()
-                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión.{mensaje_vto}")
+                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión. Tu período de prueba vence el {fecha_vto_calculada.strftime('%d/%m/%Y')}.")
                     except Exception as e:
                         st.error(f"Error al registrar la cuenta: {e}")
                 else:
@@ -225,17 +226,26 @@ else:
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
-    # FILTRO ESTRICTO DE HISTORIAL POR DUEÑO DE TALLER
-    if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
-        df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
-    else:
-        df_historial = df_historial_total if id_propietario_datos is None else pd.DataFrame()
+    # ID de control legado para Olivia
+    ID_DUEÑO_ORIGINAL = 1
 
-    # FILTRO ESTRICTO DE STOCK POR DUEÑO DE TALLER
-    if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
-        df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
+    # FILTRO DE HISTORIAL POR DUEÑO DE TALLER (MULTI-TENANT)
+    if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
+        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL):
+            df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
+        else:
+            df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
     else:
-        df_stock = df_stock_total if id_propietario_datos is None else pd.DataFrame()
+        df_historial = df_historial_total
+
+    # FILTRO DE STOCK POR DUEÑO DE TALLER (MULTI-TENANT)
+    if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
+        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL):
+            df_stock = df_stock_total[(df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_stock_total["owner_id"].isna())]
+        else:
+            df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
+    else:
+        df_stock = df_stock_total
 
     col_desc_detectada = "descripcion"
     if not df_historial.empty:
@@ -476,7 +486,6 @@ else:
             datos_cierres = extraer_datos_respuesta(res_cierres)
             df_cierres_tmp = pd.DataFrame(datos_cierres) if datos_cierres else pd.DataFrame()
             
-            # Filtro estricto por dueño de taller
             if not df_cierres_tmp.empty and "owner_id" in df_cierres_tmp.columns and id_propietario_datos is not None:
                 df_cierres = df_cierres_tmp[df_cierres_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
             else:
@@ -614,7 +623,7 @@ else:
                     st.markdown(f'<a href="https://wa.me/{tel_cliente}?text={requests.utils.quote(texto_whatsapp)}" target="_blank"><button style="background-color: #25D366; color: white; border: none; padding: 10px; border-radius: 5px; width: 100%; font-weight: bold;">🟢 Enviar por WhatsApp</button></a>', unsafe_allow_html=True)
 
     # ==========================================
-    # 🧮 CALCULADORA DE COSTOS (CONECTADA AL STOCK)
+    # 🧮 CALCULADORA DE COSTOS
     # ==========================================
     elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
         st.title("🧮 Calculadora de Costos Inteligente")
@@ -654,20 +663,30 @@ else:
             with st.container(border=True):
                 producto = st.text_input("Trabajo", value="Trabajo Personalizado")
                 costo_fijo = st.number_input("Costos Insumos ($)", min_value=0.0, value=total_acumulado_insumos)
+                
                 col_e3, col_e4 = st.columns(2)
-                horas_diseno = col_e3.number_input("Horas", min_value=0.0)
-                valor_hora = col_e4.number_input("Valor Hora ($)", value=2500.0)
+                horas_diseno = col_e3.number_input("Horas", min_value=0.0, step=0.1)
+                valor_hora = col_e4.number_input("Valor Hora ($)", value=2500.0, step=100.0)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
                 porcentaje_ganancia = st.slider("Ganancia (%)", 10, 200, 50)
                 
                 costo_total = costo_fijo + (horas_diseno * valor_hora)
                 precio_sugerido = costo_total * (1 + (porcentaje_ganancia / 100))
                 
-                if vista_cliente: st.metric("💰 PRECIO SUGERIDO", f"$ {precio_sugerido:,.2f}")
+                st.markdown("---")
+                if vista_cliente: 
+                    st.metric("💰 PRECIO SUGERIDO", f"$ {precio_sugerido:,.2f}")
                 else:
                     col_r1, col_r2 = st.columns(2)
-                    col_r1.metric("💰 PRECIO RECOMENDADO", f"$ {precio_sugerido:,.2f}")
-                    col_r2.metric("📈 GANANCIA ESTIMADA", f"$ {(precio_sugerido - costo_total):,.2f}")
+                    with col_r1:
+                        st.markdown("**💰 PRECIO RECOMENDADO**")
+                        st.markdown(f"<h3 style='color:#ff4b4b; margin-top:0;'>$ {precio_sugerido:,.2f}</h3>", unsafe_allow_html=True)
+                    with col_r2:
+                        st.markdown("**📈 GANANCIA ESTIMADA**")
+                        st.markdown(f"<h3 style='color:#2ecc71; margin-top:0;'>$ {(precio_sugerido - costo_total):,.2f}</h3>", unsafe_allow_html=True)
                 
+                st.markdown("<br>", unsafe_allow_html=True)
                 texto_presupuesto = f"¡Hola! Presupuesto para: *{producto}*\n💰 *Valor Total:* $ {precio_sugerido:,.2f}\n¡Gracias por confiar en *{st.session_state.nombre_taller}*! 🚀"
                 st.text_area("Copia rápida:", value=texto_presupuesto, height=100)
 
@@ -851,7 +870,6 @@ else:
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
-            # FILTRO ESTRICTO DE METAS POR DUEÑO DE TALLER
             if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
                 df_metas = df_metas_tmp[df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos)]
             else:
@@ -890,7 +908,9 @@ else:
                                 
                                 supabase.table("metas").insert(nueva_fila_meta).execute()
                                 st.success(f"¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
-                                st.cache_data.clear(); st.rerun()
+                                # Forzado explícito de vaciado de caché para dibujo inmediato
+                                st.cache_data.clear()
+                                st.rerun()
                         except Exception as e: st.error(f"Error: {e}")
 
         st.markdown("---")
