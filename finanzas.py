@@ -240,7 +240,22 @@ else:
         except Exception as e:
             st.error(f"Error cargando base de datos: {e}")
             return pd.DataFrame(), pd.DataFrame()
-
+with st.sidebar:
+        # ... (código existente del logo y título) ...
+        
+        st.markdown("---")
+        with st.container(border=True):
+            st.markdown("⭐ **Membresía Pro**")
+            st.caption("Plan $1/mes o $10/año")
+            
+            st.link_button(
+                label="🚀 Obtener Plan Anual", 
+                url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM",  # Reemplazar por tu Link real
+                use_container_width=True
+            )
+            
+        st.markdown("---")
+        st.markdown("### 📌 Navegación")
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
     # ID de control legado para Olivia
