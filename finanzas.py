@@ -5,8 +5,8 @@ import requests
 import io
 from PIL import Image
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Finanzas y Stock Manager Pro", page_icon="💼", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA (Título Neutro para SaaS) ---
+st.set_page_config(page_title="Gestión Financiera Pro & Stock", page_icon="💼", layout="wide")
 
 # --- CONTROL DE SESIÓN ---
 if "autenticado" not in st.session_state:
@@ -103,35 +103,21 @@ if not st.session_state.get("autenticado", False):
                                 if k in user_data:
                                     clave_usuario = user_data[k]
                                     break
+                            
                             if str(clave_usuario) == str(password_input):
                                 vto_prueba = user_data.get("trial_expires_at")
                                 if vto_prueba:
                                     fecha_vto = pd.to_datetime(vto_prueba).tz_localize(None)
                                     if datetime.now() > fecha_vto:
                                         st.error("❌ Tu período de prueba de 14 días ha vencido.")
-                                        st.info("💡 Para continuar usando la plataforma, activá tu membresía:")
-                                        st.link_button(
-                                            label="💳 Activar Membresía ($1/mes o $10/año)", 
-                                            url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM", 
-                                            type="primary",
-                                            use_container_width=True
-                                        )
+                                        st.info("💡 Para continuar disfrutando de la plataforma, activá tu membresía:")
+                                        
+                                        col_pay1, col_pay2 = st.columns(2)
+                                        with col_pay1:
+                                            st.link_button("💳 Plan Mensual ($1 USD/mes)", "https://mpago.la/2txxB11", type="primary", use_container_width=True)
+                                        with col_pay2:
+                                            st.link_button("🚀 Plan Anual ($10 USD/año)", "https://mpago.la/2MHg5iM", type="primary", use_container_width=True)
                                         st.stop()
-                                
-                                st.session_state.autenticado = True
-                                st.session_state.usuario_id = user_data["id"]
-                                st.session_state.usuario_email = user_data["email"]
-                                st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
-                                
-                                if st.session_state.rol == "Admin":
-                                    st.session_state.owner_id = user_data["id"]
-                                else:
-                                    st.session_state.owner_id = user_data.get("owner_id")
-                                    
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
-                                st.rerun()
-                           
                                 
                                 st.session_state.autenticado = True
                                 st.session_state.usuario_id = user_data["id"]
@@ -171,7 +157,6 @@ if not st.session_state.get("autenticado", False):
                         if datos_check:
                             st.error("⚠️ Este correo electrónico ya está registrado.")
                         else:
-                            # 14 días de prueba fijos calculados de antemano
                             fecha_vto_calculada = datetime.now() + timedelta(days=14)
                             fecha_vto_iso = fecha_vto_calculada.isoformat()
                             
@@ -246,29 +231,13 @@ else:
             return pd.DataFrame(), pd.DataFrame()
 
     df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
-        # ... (código existente del logo y título) ...
-        
-        st.markdown("---")
-        with st.container(border=True):
-            st.markdown("⭐ **Membresía Pro**")
-            st.caption("Plan $1/mes o $10/año")
-            
-            st.link_button(
-                label="🚀 Obtener Plan Anual", 
-                url="https://mpago.la/2txxB11 https://mpago.la/2MHg5iM",  # Reemplazar por tu Link real
-                use_container_width=True
-            )
-            
-        st.markdown("---")
-        st.markdown("### 📌 Navegación")
-    df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
 
     # ID de control legado para Olivia
     ID_DUEÑO_ORIGINAL = 1
 
     # FILTRO DE HISTORIAL POR DUEÑO DE TALLER (MULTI-TENANT)
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
-        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL):
+        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL) or usuario_email_actual.lower() == "admin@olivia.com":
             df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
         else:
             df_historial = df_historial_total[df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)]
@@ -277,7 +246,7 @@ else:
 
     # FILTRO DE STOCK POR DUEÑO DE TALLER (MULTI-TENANT)
     if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
-        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL):
+        if str(id_propietario_datos) == str(ID_DUEÑO_ORIGINAL) or usuario_email_actual.lower() == "admin@olivia.com":
             df_stock = df_stock_total[(df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_stock_total["owner_id"].isna())]
         else:
             df_stock = df_stock_total[df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)]
@@ -321,6 +290,13 @@ else:
                     st.rerun()
                 except Exception:
                     pass
+
+        st.markdown("---")
+        with st.container(border=True):
+            st.markdown("⭐ **Membresía Activa**")
+            st.caption("Elegí tu plan para mantener tu acceso:")
+            st.link_button("💳 Plan Mensual ($1 USD/mes)", "https://mpago.la/2txxB11", use_container_width=True)
+            st.link_button("🚀 Plan Anual ($10 USD/año)", "https://mpago.la/2MHg5iM", type="primary", use_container_width=True)
 
         st.markdown("---")
         st.markdown("### 📌 Navegación")
@@ -898,26 +874,21 @@ else:
                             except Exception as e: st.error(f"Error: {e}")
 
     # ==========================================
-    # 🎯 METAS DE AHORRO (SaaS MULTI-TENANT REAL)
+    # 🎯 METAS DE AHORRO
     # ==========================================
     elif seccion == "🎯 Metas de Ahorro" and rol_actual == "Admin":
         st.title("🎯 Metas de Ahorro")
         st.markdown("Creá alcancías virtuales para definir tus metas de capitalización, equipamiento o reservas del taller.")
 
-        # Consulta directa a Supabase en tiempo real sin caché previo
         try:
             res_metas = supabase.table("metas").select("*").execute()
             datos_metas_totales = extraer_datos_respuesta(res_metas)
             df_metas_tmp = pd.DataFrame(datos_metas_totales) if datos_metas_totales else pd.DataFrame()
             
             if not df_metas_tmp.empty and "owner_id" in df_metas_tmp.columns and id_propietario_datos is not None:
-                # Filtrado estricto por el ID único de cada taller/usuario
                 condicion_dueno = (df_metas_tmp["owner_id"].astype(str) == str(id_propietario_datos))
-                
-                # Para la cuenta original de Olivia, mantenemos compatibilidad con filas anteriores
                 if usuario_email_actual.lower() == "admin@olivia.com":
                     condicion_dueno = condicion_dueno | (df_metas_tmp["owner_id"].isna())
-                    
                 df_metas = df_metas_tmp[condicion_dueno]
             else:
                 df_metas = df_metas_tmp if (id_propietario_datos is None or df_metas_tmp.empty) else pd.DataFrame()
@@ -935,7 +906,6 @@ else:
                 if st.form_submit_button("🚀 Crear Alcancía", use_container_width=True, type="primary"):
                     if nueva_meta_nombre:
                         try:
-                            # Detectamos estructura de la tabla en Supabase
                             res_sample_m = supabase.table("metas").select("*").limit(1).execute()
                             datos_sample_m = extraer_datos_respuesta(res_sample_m)
                             columnas_metas = list(datos_sample_m[0].keys()) if datos_sample_m else []
@@ -957,8 +927,6 @@ else:
                             
                             supabase.table("metas").insert(nueva_fila_meta).execute()
                             st.success(f"🎉 ¡Alcancía '{nueva_meta_nombre}' creada con éxito!")
-                            
-                            # Limpieza total de memoria y recarga inmediata
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as e: 
@@ -1004,6 +972,7 @@ else:
                                 supabase.table("metas").delete().eq("id", int(row["id"])).execute()
                                 st.cache_data.clear()
                                 st.rerun()
+
     # ==========================================
     # 👥 PERSONAL DEL TALLER
     # ==========================================
