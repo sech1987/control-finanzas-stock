@@ -194,41 +194,45 @@ else:
     rol_actual = st.session_state.get("rol", "Empleado")
 
     @st.cache_data(ttl=3)
-    # --- CARGA BLINDADA DE STOCK ---
-try:
-    res_stock = supabase.table("stock").select("*").execute()
-    datos_stock = extraer_datos_respuesta(res_stock)
-    df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
-    
-    if not df_stock_tmp.empty:
-        df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
-        df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
-        
-        col_precio = None
-        for c in ["precio_costo", "precio", "costo", "valor_costo"]:
-            if c in df_stock_tmp.columns:
-                col_precio = c
-                break
-        df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float) if col_precio else 0.0
-        
-        # Muestra absolutamente todos los insumos disponibles sin filtrar severamente
-        df_stock = df_stock_tmp
-    else:
-        df_stock = pd.DataFrame()
-except Exception as e:
-    df_stock = pd.DataFrame()
+    def cargar_datos_seguro(owner_id_filtro):
+        try:
+            res_historial = supabase.table("historial").select("*").order("fecha", desc=True).execute()
+            datos_historial = extraer_datos_respuesta(res_historial)
+            df_hist_tmp = pd.DataFrame(datos_historial) if datos_historial else pd.DataFrame()
+            
+            if not df_hist_tmp.empty:
+                df_hist_tmp["fecha"] = pd.to_datetime(df_hist_tmp["fecha"])
+                df_hist_tmp["monto"] = df_hist_tmp["monto"].astype(float)
+                
+            res_stock = supabase.table("stock").select("*").execute()
+            datos_stock = extraer_datos_respuesta(res_stock)
+            df_stock_tmp = pd.DataFrame(datos_stock) if datos_stock else pd.DataFrame()
+            
+            if not df_stock_tmp.empty:
+                df_stock_tmp["cantidad"] = df_stock_tmp["cantidad"].astype(float) if "cantidad" in df_stock_tmp.columns else 0.0
+                df_stock_tmp["minimo"] = df_stock_tmp["minimo"].astype(float) if "minimo" in df_stock_tmp.columns else 0.0
+                col_precio = None
+                for c in ["precio_costo", "precio", "costo", "valor_costo"]:
+                    if c in df_stock_tmp.columns:
+                        col_precio = c
+                        break
+                df_stock_tmp["precio_costo"] = df_stock_tmp[col_precio].astype(float) if col_precio else 0.0
+                
+            return df_hist_tmp, df_stock_tmp
+        except Exception as e:
+            st.error(f"Error cargando base de datos: {e}")
+            return pd.DataFrame(), pd.DataFrame()
 
-    # FILTRO FLEXIBLE DE HISTORIAL (Garantiza ver todos los movimientos)
+    df_historial_total, df_stock_total = cargar_datos_seguro(id_propietario_datos)
+
+    # FILTRO FLEXIBLE DE HISTORIAL
     if not df_historial_total.empty and "owner_id" in df_historial_total.columns and id_propietario_datos is not None:
         df_historial = df_historial_total[(df_historial_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_historial_total["owner_id"].isna())]
     else:
         df_historial = df_historial_total
 
-    # FILTRO FLEXIBLE DE STOCK
-    if not df_stock_total.empty and "owner_id" in df_stock_total.columns and id_propietario_datos is not None:
-        df_stock = df_stock_total[(df_stock_total["owner_id"].astype(str) == str(id_propietario_datos)) | (df_stock_total["owner_id"].isna())]
-    else:
-        df_stock = df_stock_total
+    # CARGA DIRECTA Y BLINDADA DE STOCK (Muestra todos los insumos cargados)
+    df_stock = df_stock_total
 
     col_desc_detectada = "descripcion"
     if not df_historial.empty:
@@ -829,7 +833,7 @@ except Exception as e:
                                     supabase.table("stock").insert(nuevo_reg).execute()
                                     st.success("¡Insumo cargado!")
                                     st.cache_data.clear(); st.rerun()
-                            except Exception as e: st.error(f"Error: {e}")                  
+                            except Exception as e: st.error(f"Error: {e}")
 
     # ==========================================
     # 🎯 METAS DE AHORRO
