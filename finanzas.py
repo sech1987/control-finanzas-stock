@@ -598,21 +598,37 @@ else:
 
         with st.form("form_nueva_operacion"):
             col_o1, col_o2 = st.columns(2)
-            monto_op = col_o1.number_input("Monto ($)", min_value=1.0, step=100.0)
+            monto_op = col_o1.number_input("Monto Total ($)", min_value=1.0, step=100.0)
             desc_op = col_o2.text_input("Detalle / Concepto (Ej: Remeras Enzo, Tazas, etc.)")
             
-            # --- NUEVO SELECTOR DE MEDIO DE PAGO ---
+            # Selector de Medio de Pago
             medios_pago = ["💵 Efectivo", "📲 Transferencia / Mercado Pago", "💳 Tarjeta Débito / Crédito", "📝 Fiado / Cta. Cte. (A Cobrar)"]
             medio_pago_sel = st.selectbox("Medio de Pago / Condición de Cobro", medios_pago)
             
+            # --- NUEVO DESCUENTO DE STOCK EN VENTA ---
+            descontar_stock = False
+            insumo_seleccionado = None
+            cantidad_consumida = 0.0
+            
+            if "Venta" in tipo_op:
+                st.markdown("---")
+                descontar_stock = st.checkbox("📦 ¿Esta venta consume insumos del stock?")
+                if descontar_stock:
+                    if not df_stock.empty:
+                        col_st1, col_st2 = st.columns(2)
+                        insumo_seleccionado = col_st1.selectbox("Insumo consumido:", df_stock["item"].tolist())
+                        cantidad_consumida = col_st2.number_input("Cantidad consumida / restada:", min_value=0.01, value=1.0, step=1.0)
+                    else:
+                        st.info("⚠️ Aún no tenés insumos registrados en la sección de Stock.")
+
             if st.form_submit_button("💾 Guardar Operación", use_container_width=True, type="primary"):
                 if desc_op:
                     tipo_db = "Ingreso" if "Venta" in tipo_op else ("Gasto Negocio" if "Gasto Negocio" in tipo_op else ("Retiro Sueldo" if "Retirar" in tipo_op else "Gasto Personal"))
                     
-                    # Aclaramos el medio de pago en el detalle para lectura fácil
                     detalle_final = f"{desc_op} [{medio_pago_sel}]"
                     
                     try:
+                        # 1. Registrar el movimiento en el historial
                         res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
                         columnas_existentes_hist = list(extraer_datos_respuesta(res_sample_hist)[0].keys()) if extraer_datos_respuesta(res_sample_hist) else []
                         col_destino_desc = "descripcion"
@@ -632,11 +648,23 @@ else:
                             fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
-                        st.success(f"¡Operación registrada con éxito en {medio_pago_sel}!")
+                        
+                        # 2. Descontar del stock de insumos si fue seleccionado
+                        if descontar_stock and insumo_seleccionado and cantidad_consumida > 0:
+                            row_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
+                            cant_actual = float(row_insumo.get("cantidad", 0))
+                            nueva_cant = max(0.0, cant_actual - cantidad_consumida)
+                            
+                            supabase.table("stock").update({"cantidad": nueva_cant}).eq("item", insumo_seleccionado).execute()
+                            st.success(f"¡Venta registrada y se descontaron {cantidad_consumida} unidad(es) de '{insumo_seleccionado}' del stock!")
+                        else:
+                            st.success(f"¡Operación registrada con éxito en {medio_pago_sel}!")
+                            
                         st.session_state.datos_ultimo_envio = {"detalle": desc_op, "monto": monto_op} if tipo_db == "Ingreso" else None
                         st.cache_data.clear()
+                        st.rerun()
                     except Exception as e: 
-                        st.error(f"Error al guardar: {e}")
+                        st.error(f"Error al guardar la operación: {e}")
                 else: 
                     st.warning("Por favor, ingresá una descripción o detalle.")
 
