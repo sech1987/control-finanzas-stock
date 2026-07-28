@@ -596,7 +596,7 @@ else:
         
         if "datos_ultimo_envio" not in st.session_state: st.session_state.datos_ultimo_envio = None
 
-        # --- SELECCIÓN Y CÁLCULO DE STOCK FUERA DEL FORMULARIO PARA RESPUESTA INSTANTÁNEA ---
+        # --- SELECCIÓN Y CÁLCULO DE STOCK FUERA DEL FORMULARIO ---
         descontar_stock = False
         insumo_seleccionado = None
         cantidad_consumida = 1
@@ -616,20 +616,20 @@ else:
                     precio_costo_unit = float(row_ins.get("precio_costo", 0.0))
                     costo_insumos_calculado = precio_costo_unit * cantidad_consumida
                     
-                    col_st3.metric("Costo Insumos", f"$ {costo_insumos_calculado:,.2f}")
-                    st.caption(f"💡 Costo unitario registrado: $ {precio_costo_unit:,.2f}")
+                    col_st3.metric("Costo de Insumos", f"$ {costo_insumos_calculado:,.2f}")
+                    st.caption(f"💡 Costo unitario de '{insumo_seleccionado}': $ {precio_costo_unit:,.2f}")
                 else:
                     st.info("⚠️ No tenés insumos registrados en Stock. Podés ingresar el monto manualmente abajo.")
 
-        # --- FORMULARIO FINAL DE REGISTRO ---
+        # --- FORMULARIO DE REGISTRO ---
         with st.form("form_nueva_operacion"):
             desc_op = st.text_input("Detalle / Concepto (Ej: Remeras Enzo, Tazas, etc.)")
             
             medios_pago = ["💵 Efectivo", "📲 Transferencia / Mercado Pago", "💳 Tarjeta Débito / Crédito", "📝 Fiado / Cta. Cte. (A Cobrar)"]
             medio_pago_sel = st.selectbox("Medio de Pago / Condición de Cobro", medios_pago)
             
-            val_defecto = float(costo_insumos_calculado * 2.0) if costo_insumos_calculado > 0 else 100.0
-            monto_op = st.number_input("Monto Total Cobrado al Cliente ($)", min_value=1.0, value=max(1.0, val_defecto), step=100.0)
+            # Monto total cobrado al cliente (100% editable por el usuario)
+            monto_op = st.number_input("Monto Total Cobrado al Cliente ($)", min_value=1.0, value=100.0, step=100.0)
 
             if st.form_submit_button("💾 Guardar Operación", use_container_width=True, type="primary"):
                 if desc_op:
