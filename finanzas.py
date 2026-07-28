@@ -596,50 +596,48 @@ else:
         
         if "datos_ultimo_envio" not in st.session_state: st.session_state.datos_ultimo_envio = None
 
+        # --- SELECCIÓN Y CÁLCULO DE STOCK FUERA DEL FORMULARIO PARA RESPUESTA INSTANTÁNEA ---
+        descontar_stock = False
+        insumo_seleccionado = None
+        cantidad_consumida = 1
+        costo_insumos_calculado = 0.0
+        
+        if "Venta" in tipo_op:
+            st.markdown("---")
+            descontar_stock = st.checkbox("📦 ¿Esta venta consume algún insumo del stock?")
+            if descontar_stock:
+                if not df_stock.empty:
+                    col_st1, col_st2, col_st3 = st.columns([3, 2, 2])
+                    insumo_seleccionado = col_st1.selectbox("Insumo consumido:", df_stock["item"].tolist(), key="sel_insumo_directo")
+                    cantidad_consumida = col_st2.number_input("Cantidad usada:", min_value=1, value=1, step=1, key="cant_insumo_directo")
+                    
+                    # Buscar costo unitario y calcular
+                    row_ins = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
+                    precio_costo_unit = float(row_ins.get("precio_costo", 0.0))
+                    costo_insumos_calculado = precio_costo_unit * cantidad_consumida
+                    
+                    col_st3.metric("Costo Insumos", f"$ {costo_insumos_calculado:,.2f}")
+                    st.caption(f"💡 Costo unitario registrado: $ {precio_costo_unit:,.2f}")
+                else:
+                    st.info("⚠️ No tenés insumos registrados en Stock. Podés ingresar el monto manualmente abajo.")
+
+        # --- FORMULARIO FINAL DE REGISTRO ---
         with st.form("form_nueva_operacion"):
             desc_op = st.text_input("Detalle / Concepto (Ej: Remeras Enzo, Tazas, etc.)")
             
-            # Selector de Medio de Pago
             medios_pago = ["💵 Efectivo", "📲 Transferencia / Mercado Pago", "💳 Tarjeta Débito / Crédito", "📝 Fiado / Cta. Cte. (A Cobrar)"]
             medio_pago_sel = st.selectbox("Medio de Pago / Condición de Cobro", medios_pago)
             
-            # --- CÁLCULO OPCIONAL Y DESCUENTO DE STOCK EN VENTA ---
-            descontar_stock = False
-            insumo_seleccionado = None
-            cantidad_consumida = 0
-            costo_insumos_calculado = 0.0
-            
-            if "Venta" in tipo_op:
-                st.markdown("---")
-                descontar_stock = st.checkbox("📦 ¿Esta venta consume algún insumo cargado en el stock?")
-                if descontar_stock:
-                    if not df_stock.empty:
-                        col_st1, col_st2, col_st3 = st.columns([3, 2, 2])
-                        insumo_seleccionado = col_st1.selectbox("Insumo consumido:", df_stock["item"].tolist())
-                        cantidad_consumida = col_st2.number_input("Cantidad usada:", min_value=1, value=1, step=1)
-                        
-                        # Buscar precio de costo del insumo seleccionado
-                        datos_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
-                        precio_costo_unit = float(datos_insumo.get("precio_costo", 0.0))
-                        costo_insumos_calculado = precio_costo_unit * cantidad_consumida
-                        
-                        col_st3.metric("Costo Insumos ($)", f"$ {costo_insumos_calculado:,.2f}")
-                        st.caption(f"💡 Precio de costo unitario de '{insumo_seleccionado}': $ {precio_costo_unit:,.2f}")
-                    else:
-                        st.info("⚠️ Aún no tenés insumos registrados en la sección de Stock, pero podés ingresar el monto cobrado manualmente abajo.")
-
-            # Campo de Monto (libre para modificar en cualquier momento)
-            st.markdown("---")
-            monto_op = st.number_input("Monto Total Cobrado al Cliente ($)", min_value=1.0, value=100.0, step=100.0)
+            val_defecto = float(costo_insumos_calculado * 2.0) if costo_insumos_calculado > 0 else 100.0
+            monto_op = st.number_input("Monto Total Cobrado al Cliente ($)", min_value=1.0, value=max(1.0, val_defecto), step=100.0)
 
             if st.form_submit_button("💾 Guardar Operación", use_container_width=True, type="primary"):
                 if desc_op:
                     tipo_db = "Ingreso" if "Venta" in tipo_op else ("Gasto Negocio" if "Gasto Negocio" in tipo_op else ("Retiro Sueldo" if "Retirar" in tipo_op else "Gasto Personal"))
-                    
                     detalle_final = f"{desc_op} [{medio_pago_sel}]"
                     
                     try:
-                        # 1. Registrar el movimiento en el historial
+                        # 1. Insertar la operación en la base de datos
                         res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
                         columnas_existentes_hist = list(extraer_datos_respuesta(res_sample_hist)[0].keys()) if extraer_datos_respuesta(res_sample_hist) else []
                         col_destino_desc = "descripcion"
@@ -660,14 +658,14 @@ else:
                         
                         supabase.table("historial").insert(fila_insertar).execute()
                         
-                        # 2. Descontar del stock de insumos SOLO si el usuario activó la casilla
+                        # 2. Descontar del stock en el mismo momento si corresponde
                         if descontar_stock and insumo_seleccionado and cantidad_consumida > 0:
                             row_insumo = df_stock[df_stock["item"] == insumo_seleccionado].iloc[0]
                             cant_actual = int(float(row_insumo.get("cantidad", 0)))
                             nueva_cant = max(0, cant_actual - int(cantidad_consumida))
                             
                             supabase.table("stock").update({"cantidad": int(nueva_cant)}).eq("item", insumo_seleccionado).execute()
-                            st.success(f"¡Venta registrada y se descontaron {int(cantidad_consumida)} unidad(es) de '{insumo_seleccionado}' del stock!")
+                            st.success(f"¡Operación registrada y se descontaron {int(cantidad_consumida)} unidad(es) de '{insumo_seleccionado}' del stock!")
                         else:
                             st.success(f"¡Operación registrada con éxito en {medio_pago_sel}!")
                             
@@ -688,6 +686,8 @@ else:
                 st.text_area("Texto a enviar:", value=texto_whatsapp, height=120)
                 if tel_cliente:
                     st.markdown(f'<a href="https://wa.me/{tel_cliente}?text={requests.utils.quote(texto_whatsapp)}" target="_blank"><button style="background-color: #25D366; color: white; border: none; padding: 10px; border-radius: 5px; width: 100%; font-weight: bold; cursor: pointer;">🟢 Abrir WhatsApp y Enviar</button></a>', unsafe_allow_html=True)
+    
+    #===========================================
     # 🧮 CALCULADORA DE COSTOS
     # ==========================================
     elif seccion == "🧮 Calculadora de Costos" and rol_actual == "Admin":
