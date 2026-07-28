@@ -586,7 +586,7 @@ else:
                 st.markdown("<br><hr>", unsafe_allow_html=True)
                 st.markdown(consultar_gemini_directo(prompt_expert))
 
-    # ==========================================
+# ==========================================
     # 📝 NUEVA OPERACIÓN
     # ==========================================
     elif seccion == "📝 Nueva Operación":
@@ -599,42 +599,56 @@ else:
         with st.form("form_nueva_operacion"):
             col_o1, col_o2 = st.columns(2)
             monto_op = col_o1.number_input("Monto ($)", min_value=1.0, step=100.0)
-            desc_op = col_o2.text_input("Detalle / Concepto")
-            if st.form_submit_button("💾 Guardar Operación", use_container_width=True):
+            desc_op = col_o2.text_input("Detalle / Concepto (Ej: Remeras Enzo, Tazas, etc.)")
+            
+            # --- NUEVO SELECTOR DE MEDIO DE PAGO ---
+            medios_pago = ["💵 Efectivo", "📲 Transferencia / Mercado Pago", "💳 Tarjeta Débito / Crédito", "📝 Fiado / Cta. Cte. (A Cobrar)"]
+            medio_pago_sel = st.selectbox("Medio de Pago / Condición de Cobro", medios_pago)
+            
+            if st.form_submit_button("💾 Guardar Operación", use_container_width=True, type="primary"):
                 if desc_op:
                     tipo_db = "Ingreso" if "Venta" in tipo_op else ("Gasto Negocio" if "Gasto Negocio" in tipo_op else ("Retiro Sueldo" if "Retirar" in tipo_op else "Gasto Personal"))
+                    
+                    # Aclaramos el medio de pago en el detalle para lectura fácil
+                    detalle_final = f"{desc_op} [{medio_pago_sel}]"
+                    
                     try:
                         res_sample_hist = supabase.table("historial").select("*").limit(1).execute()
                         columnas_existentes_hist = list(extraer_datos_respuesta(res_sample_hist)[0].keys()) if extraer_datos_respuesta(res_sample_hist) else []
                         col_destino_desc = "descripcion"
                         for c in ["descripcion", "detalle", "concepto"]:
-                            if c in columnas_existentes_hist: col_destino_desc = c; break
+                            if c in columnas_existentes_hist: 
+                                col_destino_desc = c
+                                break
                         
                         fila_insertar = {
                             "fecha": datetime.now().isoformat(),
                             "tipo": tipo_db,
                             "monto": monto_op,
-                            col_destino_desc: desc_op,
+                            col_destino_desc: detalle_final,
                             "usuario_email": usuario_email_actual
                         }
-                        if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None: fila_insertar["owner_id"] = int(id_propietario_datos)
+                        if "owner_id" in columnas_existentes_hist and id_propietario_datos is not None: 
+                            fila_insertar["owner_id"] = int(id_propietario_datos)
                         
                         supabase.table("historial").insert(fila_insertar).execute()
-                        st.success("¡Operación registrada con éxito!")
+                        st.success(f"¡Operación registrada con éxito en {medio_pago_sel}!")
                         st.session_state.datos_ultimo_envio = {"detalle": desc_op, "monto": monto_op} if tipo_db == "Ingreso" else None
                         st.cache_data.clear()
-                    except Exception as e: st.error(f"Error: {e}")
-                else: st.warning("Ingresá una descripción.")
+                    except Exception as e: 
+                        st.error(f"Error al guardar: {e}")
+                else: 
+                    st.warning("Por favor, ingresá una descripción o detalle.")
 
         if st.session_state.datos_ultimo_envio:
             st.markdown("---")
             with st.container(border=True):
-                tel_cliente = st.text_input("WhatsApp del Cliente", placeholder="549...")
+                st.subheader("📲 Enviar Comprobante por WhatsApp")
+                tel_cliente = st.text_input("Número de WhatsApp del Cliente (ej: 54911...)", placeholder="549...")
                 texto_whatsapp = f"¡Hola! Te pasamos el comprobante de tu compra en *{st.session_state.nombre_taller}* 🛍️\n\n📌 *Detalle:* {st.session_state.datos_ultimo_envio['detalle']}\n💰 *Monto:* $ {st.session_state.datos_ultimo_envio['monto']:,.2f}\n\n¡Gracias por elegirnos! 🚀"
-                st.text_area("Texto:", value=texto_whatsapp, height=120)
+                st.text_area("Texto a enviar:", value=texto_whatsapp, height=120)
                 if tel_cliente:
-                    st.markdown(f'<a href="https://wa.me/{tel_cliente}?text={requests.utils.quote(texto_whatsapp)}" target="_blank"><button style="background-color: #25D366; color: white; border: none; padding: 10px; border-radius: 5px; width: 100%; font-weight: bold;">🟢 Enviar por WhatsApp</button></a>', unsafe_allow_html=True)
-
+                    st.markdown(f'<a href="https://wa.me/{tel_cliente}?text={requests.utils.quote(texto_whatsapp)}" target="_blank"><button style="background-color: #25D366; color: white; border: none; padding: 10px; border-radius: 5px; width: 100%; font-weight: bold; cursor: pointer;">🟢 Abrir WhatsApp y Enviar</button></a>', unsafe_allow_html=True)
     # ==========================================
     # 🧮 CALCULADORA DE COSTOS
     # ==========================================
