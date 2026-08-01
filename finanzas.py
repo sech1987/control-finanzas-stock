@@ -87,105 +87,123 @@ if not st.session_state.get("autenticado", False):
     st.markdown("<h1 style='text-align: center; color: #ff4b4b;'>💼 Finanzas & Stock Manager Pro</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Accedé a tu panel o registrá tu taller para empezar tu prueba de 14 días gratis</p>", unsafe_allow_html=True)
     
-    tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "🚀 Crear Cuenta (14 días gratis)"])
+    col_login_main, col_planes_side = st.columns([2, 1])
     
-    with tab_login:
-        with st.container(border=True):
-            email_input = st.text_input("Correo Electrónico", placeholder="ejemplo@olivia.com", key="login_email")
-            password_input = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
-            
-            if st.button("Ingresar al Panel", type="primary", use_container_width=True):
-                if email_input and password_input:
-                    try:
-                        res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
-                        datos_user = extraer_datos_respuesta(res_user)
-                        
-                        if datos_user:
-                            user_data = datos_user[0]
-                            clave_usuario = None
-                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                if k in user_data:
-                                    clave_usuario = user_data[k]
-                                    break
+    with col_login_main:
+        tab_login, tab_registro = st.tabs(["🔑 Iniciar Sesión", "🚀 Crear Cuenta (14 días gratis)"])
+        
+        with tab_login:
+            with st.container(border=True):
+                email_input = st.text_input("Correo Electrónico", placeholder="ejemplo@olivia.com", key="login_email")
+                password_input = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
+                
+                if st.button("Ingresar al Panel", type="primary", use_container_width=True):
+                    if email_input and password_input:
+                        try:
+                            res_user = supabase.table("usuarios").select("*").eq("email", email_input).execute()
+                            datos_user = extraer_datos_respuesta(res_user)
                             
-                            if str(clave_usuario) == str(password_input):
-                                st.session_state.autenticado = True
-                                st.session_state.usuario_id = user_data["id"]
-                                st.session_state.usuario_email = user_data.get("email", email_input)
-                                st.session_state.rol = user_data.get("rol", "Empleado")
-                                st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
-                                st.session_state.fecha_registro = user_data.get("created_at", datetime.now().isoformat())
-                                st.session_state.estado_suscripcion = user_data.get("estado_suscripcion", "Prueba")
+                            if datos_user:
+                                user_data = datos_user[0]
+                                clave_usuario = None
+                                for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                    if k in user_data:
+                                        clave_usuario = user_data[k]
+                                        break
                                 
-                                if st.session_state.rol == "Admin":
-                                    st.session_state.owner_id = user_data["id"]
-                                else:
-                                    st.session_state.owner_id = user_data.get("owner_id")
+                                if str(clave_usuario) == str(password_input):
+                                    st.session_state.autenticado = True
+                                    st.session_state.usuario_id = user_data["id"]
+                                    st.session_state.usuario_email = user_data.get("email", email_input)
+                                    st.session_state.rol = user_data.get("rol", "Empleado")
+                                    st.session_state.nombre_taller = user_data.get("taller", user_data.get("nombre_taller", "Olivia Imagen"))
+                                    st.session_state.fecha_registro = user_data.get("created_at", datetime.now().isoformat())
+                                    st.session_state.estado_suscripcion = user_data.get("estado_suscripcion", "Prueba")
                                     
-                                st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
-                                st.rerun()
+                                    if st.session_state.rol == "Admin":
+                                        st.session_state.owner_id = user_data["id"]
+                                    else:
+                                        st.session_state.owner_id = user_data.get("owner_id")
+                                        
+                                    st.success(f"¡Bienvenido/a a {st.session_state.nombre_taller}!")
+                                    st.rerun()
+                                else:
+                                    st.error("Contraseña incorrecta.")
                             else:
-                                st.error("Contraseña incorrecta.")
-                        else:
-                            st.error("El correo ingresado no está registrado.")
-                    except Exception as e:
-                        st.error(f"Error en el inicio de sesión: {e}")
-                else:
-                    st.warning("Por favor, completá todos los campos.")
-                    
-    with tab_registro:
-        with st.container(border=True):
-            st.markdown("### Registrar nuevo taller")
-            reg_taller = st.text_input("Nombre de tu Emprendimiento/Taller", placeholder="Ej: Mi Taller Gráfico")
-            reg_email = st.text_input("Correo Electrónico del Administrador", placeholder="admin@mitaller.com")
-            reg_pass = st.text_input("Crear Contraseña", type="password", placeholder="Mínimo 6 caracteres")
-            
-            if st.button("Comenzar Prueba Gratis de 14 Días", type="primary", use_container_width=True):
-                if reg_taller and reg_email and reg_pass:
-                    try:
-                        res_check = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
-                        datos_check = extraer_datos_respuesta(res_check)
+                                st.error("El correo ingresado no está registrado.")
+                        except Exception as e:
+                            st.error(f"Error en el inicio de sesión: {e}")
+                    else:
+                        st.warning("Por favor, completá todos los campos.")
                         
-                        if datos_check:
-                            st.error("⚠️ Este correo electrónico ya está registrado.")
-                        else:
-                            fecha_vto_calculada = datetime.now() + timedelta(days=14)
-                            fecha_vto_iso = fecha_vto_calculada.isoformat()
+        with tab_registro:
+            with st.container(border=True):
+                st.markdown("### Registrar nuevo taller")
+                reg_taller = st.text_input("Nombre de tu Emprendimiento/Taller", placeholder="Ej: Mi Taller Gráfico")
+                reg_email = st.text_input("Correo Electrónico del Administrador", placeholder="admin@mitaller.com")
+                reg_pass = st.text_input("Crear Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+                
+                if st.button("Comenzar Prueba Gratis de 14 Días", type="primary", use_container_width=True):
+                    if reg_taller and reg_email and reg_pass:
+                        try:
+                            res_check = supabase.table("usuarios").select("id").eq("email", reg_email).execute()
+                            datos_check = extraer_datos_respuesta(res_check)
                             
-                            res_sample = supabase.table("usuarios").select("*").limit(1).execute()
-                            datos_sample = extraer_datos_respuesta(res_sample)
-                            columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
-                            
-                            col_pass_detectada = "password"
-                            for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
-                                if k in columnas_existentes:
-                                    col_pass_detectada = k
-                                    break
-                            
-                            nuevo_admin = {
-                                "email": reg_email,
-                                col_pass_detectada: reg_pass,
-                                "rol": "Admin",
-                                "estado_suscripcion": "Prueba",
-                                "created_at": datetime.now().isoformat()
-                            }
-                            
-                            if "trial_expires_at" in columnas_existentes:
-                                nuevo_admin["trial_expires_at"] = fecha_vto_iso
-                            
-                            if "nombre_taller" in columnas_existentes:
-                                nuevo_admin["nombre_taller"] = reg_taller
-                            elif "taller" in columnas_existentes:
-                                nuevo_admin["taller"] = reg_taller
-                            
-                            supabase.table("usuarios").insert(nuevo_admin).execute()
-                            st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión. Tu período de prueba vence el {fecha_vto_calculada.strftime('%d/%m/%Y')}.")
-                    except Exception as e:
-                        st.error(f"Error al registrar la cuenta: {e}")
-                else:
-                    st.warning("Por favor, completá todos los campos para el registro.")
+                            if datos_check:
+                                st.error("⚠️ Este correo electrónico ya está registrado.")
+                            else:
+                                fecha_vto_calculada = datetime.now() + timedelta(days=14)
+                                fecha_vto_iso = fecha_vto_calculada.isoformat()
+                                
+                                res_sample = supabase.table("usuarios").select("*").limit(1).execute()
+                                datos_sample = extraer_datos_respuesta(res_sample)
+                                columnas_existentes = list(datos_sample[0].keys()) if datos_sample else []
+                                
+                                col_pass_detectada = "password"
+                                for k in ["password", "contraseña", "contrasena", "clave", "pass"]:
+                                    if k in columnas_existentes:
+                                        col_pass_detectada = k
+                                        break
+                                
+                                nuevo_admin = {
+                                    "email": reg_email,
+                                    col_pass_detectada: reg_pass,
+                                    "rol": "Admin",
+                                    "estado_suscripcion": "Prueba",
+                                    "created_at": datetime.now().isoformat()
+                                }
+                                
+                                if "trial_expires_at" in columnas_existentes:
+                                    nuevo_admin["trial_expires_at"] = fecha_vto_iso
+                                
+                                if "nombre_taller" in columnas_existentes:
+                                    nuevo_admin["nombre_taller"] = reg_taller
+                                elif "taller" in columnas_existentes:
+                                    nuevo_admin["taller"] = reg_taller
+                                
+                                supabase.table("usuarios").insert(nuevo_admin).execute()
+                                st.success(f"🎉 ¡Cuenta de {reg_taller} creada con éxito! Ya podés iniciar sesión. Tu período de prueba vence el {fecha_vto_calculada.strftime('%d/%m/%Y')}.")
+                        except Exception as e:
+                            st.error(f"Error al registrar la cuenta: {e}")
+                    else:
+                        st.warning("Por favor, completá todos los campos para el registro.")
 
-    # Detener la ejecución para no cargar el panel si no está autenticado
+    # --- BANNER / TARJETA DE PLANES EN EL LOGIN ---
+    with col_planes_side:
+        with st.container(border=True):
+            st.markdown("### ⭐ Plan de Membresía")
+            st.caption("¿Se venció tu prueba o querés activar tu cuenta?")
+            
+            st.markdown("**Plan Mensual:** $1 USD / mes")
+            st.link_button("💳 Pagar Plan Mensual", "https://mpago.la/2txxB11", use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("**Pase Anual Fundador:** $10 USD / año")
+            st.link_button("🚀 Pagar Pase Anual", "https://mpago.la/2MHg5iM", type="primary", use_container_width=True)
+            
+            st.markdown("---")
+            st.caption("💬 Una vez abonado, te enviaremos tu código de activación por mail o WhatsApp para ingresar.")
+
     st.stop()
 
 
