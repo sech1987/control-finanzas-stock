@@ -211,65 +211,20 @@ if not st.session_state.get("autenticado", False):
 # 🛡️ VERIFICACIÓN DE SUSCRIPCIÓN Y PRUEBA GRATIS
 # ==========================================
 try:
-    f_reg_str = str(st.session_state.get("fecha_registro", "")).replace("Z", "")
-    fecha_reg = datetime.fromisoformat(f_reg_str)
-except Exception:
-    fecha_reg = datetime.now()
+    f_reg_raw = st.session_state.get("fecha_registro", datetime.now().isoformat())
     
-dias_usados = (datetime.now() - fecha_reg).days
+    # Convertimos la fecha usando Pandas para manejar de forma transparente cualquier zona horaria Z o +00:00
+    fecha_reg_dt = pd.to_datetime(f_reg_raw).tz_localize(None)
+    fecha_actual_dt = pd.to_datetime(datetime.now()).tz_localize(None)
+    
+    dias_usados = (fecha_actual_dt - fecha_reg_dt).days
+except Exception:
+    dias_usados = 0
+
 dias_restantes = max(0, 14 - dias_usados)
 
 estado_sub = st.session_state.get("estado_suscripcion", "Prueba")
 tiene_acceso = (estado_sub == "Activo") or (dias_usados <= 14)
-
-# --- SIDEBAR (ESTADO DE CUENTA) ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("💳 Estado de tu Cuenta")
-if estado_sub == "Activo":
-    st.sidebar.success("✅ Suscripción Activa")
-elif tiene_acceso:
-    st.sidebar.info(f"⏳ Prueba Gratis ({dias_restantes} días restantes)")
-else:
-    st.sidebar.error("🚨 Prueba de 14 Días Expirada")
-
-with st.sidebar.expander("⭐ Suscribirme / Activar Plan"):
-    st.markdown("[👉 Pagar Plan Mensual ($1 USD)](https://mpago.la/2txxB11)", unsafe_allow_html=True)
-    st.markdown("[👉 Pagar Pase Anual ($10 USD)](https://mpago.la/2MHg5iM)", unsafe_allow_html=True)
-
-# --- PANTALLA DE BLOQUEO SI EXPIRÓ ---
-if not tiene_acceso:
-    st.title("🔒 Tu prueba gratuita de 14 días ha finalizado")
-    st.warning("Para continuar usando el sistema y mantener organizados tus costos y tu stock, elegí tu plan:")
-    
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        with st.container(border=True):
-            st.subheader("Plan Mensual")
-            st.markdown("### $ 1 USD / mes")
-            st.markdown("• Acceso ilimitado\n• Calculadora y Stock\n• Soporte por WhatsApp")
-            st.markdown('<a href="https://mpago.la/2txxB11" target="_blank"><button style="background-color: #E63946; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">💳 Suscribirme por $1 USD</button></a>', unsafe_allow_html=True)
-            
-    with col_p2:
-        with st.container(border=True):
-            st.subheader("Pase Anual Fundador 👑")
-            st.markdown("### $ 10 USD / año")
-            st.markdown("• Ahorrás 2 meses\n• Precio congelado de por vida\n• Soporte prioritario")
-            st.markdown('<a href="https://mpago.la/2MHg5iM" target="_blank"><button style="background-color: #2A9D8F; color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer;">🚀 Obtener Pase Anual ($10 USD)</button></a>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("🔑 ¿Ya realizaste el pago?")
-    cod_ingresado = st.text_input("Ingresá tu Código de Activación (enviado por mail/WhatsApp):", placeholder="Ej: PRO2026")
-    if st.button("🔓 Activar Mi Cuenta", type="primary"):
-        if cod_ingresado.strip().upper() in ["PRO2026", "FUNDADOR2026", "ACTIVAR123"]:
-            st.session_state.estado_suscripcion = "Activo"
-            st.success("🎉 ¡Cuenta activada con éxito!")
-            st.rerun()
-        else:
-            st.error("Código no válido. Escribinos por WhatsApp si ya abonaste.")
-
-    st.markdown("💬 [Contactar a Soporte por WhatsApp](https://wa.me/5491100000000?text=Hola!%20Ya%20pagué%20mi%20suscripción)")
-    st.stop()
-
 
 # ==========================================
 # 📊 PÁGINA PRINCIPAL (SISTEMA AUTENTICADO)
